@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dante-agent"
+version = "0.1.0"
+description = "Experimental local agent research project"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["ollama>=0.4.0", "pydantic>=2.7.0", "python-dotenv>=1.0.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
