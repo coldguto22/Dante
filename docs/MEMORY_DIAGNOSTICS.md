@@ -1,6 +1,6 @@
 # Memory diagnostics (stage 1)
 
-This step investigates the existing SQLite event log without changing Dante's memory or retrieval behavior.
+This document describes the SQLite event log and the limits of Dante's current retrieval behavior.
 
 ## Run locally
 
@@ -31,10 +31,10 @@ Be aware that this can print private conversation content in the terminal. The d
 ## What the current implementation does
 
 - `DanteAgent.respond()` stores the incoming user message before retrieving context.
-- It calls `EventStore.recent(limit=12)`.
+- It selects the latest 12 stored events for chronological conversation context.\n- It also searches older `user_message` events for lexical overlap with the new user message (up to three results).
 - `EventStore.recent()` selects the last 12 database events by insertion ID and returns them chronologically.
 - The agent then includes only `user_message` and `assistant_message` events in the LLM messages. Any other event type in the 12-row window consumes a slot but is filtered out.
-- The LLM receives the configured system prompt plus the selected conversation messages. It does not directly query SQLite.
+- When older matches are found outside the recent window, Dante adds a separate system message containing those user-authored historical statements and their event IDs.\n- The LLM receives the configured system prompt, any recovered-memory message, and the selected conversation messages. It does not directly query SQLite.
 - After the LLM replies, Dante stores the assistant response as another event.
 
 Because the diagnostic runs between turns, its latest-12 listing is a snapshot of stored events, not a capture of a past LLM request. On the next turn, Dante first inserts the new user message and then selects the latest 12 events. Use the listing to identify likely truncation and the `--show-context` option to inspect the currently selected message content, while remembering this timing distinction.
@@ -49,4 +49,5 @@ Because the diagnostic runs between turns, its latest-12 listing is a snapshot o
 
 ## Automated checks
 
-The tests for this step cover the read-only audit output and make the current 12-event boundary explicit. They document existing behavior; they do not add relevance-based retrieval, structured profile memory, or a fix for forgetting old facts.
+The current lexical retrieval is a small baseline, not semantic search or a structured fact store. It only searches user-authored messages, uses normalized token overlap, and may miss paraphrases or retrieve loosely related statements. Assistant messages are deliberately excluded so model-generated claims are not promoted as user-provided facts. Retrieved statements are historical evidence, not independently verified truth. Automated tests cover retrieval outside the recent window, assistant-message exclusion, and no-match behavior.
+\n## Retrieval behavior and limitations\n\nThe first retrieval baseline is intentionally dependency-free: it normalizes case and accents, removes a small Portuguese stop-word list, and ranks old user messages by token overlap. It retrieves at most three messages. Messages already present in the latest 12 events are not duplicated. A retrieved statement is labeled with its database event ID and described to the model as historical user-authored context, not a verified fact or instruction.\n\nThis approach is suitable for measuring whether older statements can be brought back into context, but it is not robust semantic memory: synonyms, paraphrases, ambiguous terms, and long histories can reduce relevance. The model can still misinterpret retrieved text, so the source statement and the generated answer should be evaluated separately.\n
