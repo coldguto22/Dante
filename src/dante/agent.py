@@ -47,7 +47,7 @@ class DanteAgent:
             return
 
         included_types = {"user_message", "assistant_message"}
-        message_index = 1  # Index zero is always the system prompt.
+        # Index zero is the main prompt; retrieved memories add another system message.\n        message_index = 2 if retrieved else 1
         events = []
         for event_id, event in selected:
             included = event.event_type in included_types
