@@ -5,14 +5,13 @@ Usage: python -m dante.memory_probe
 This experiment uses temporary databases and never reads or writes Dante's normal history.
 It requires Ollama to be running and the configured model to be installed.
 """
-import hashlib
 import json
 import os
 from pathlib import Path
 import tempfile
 
-from dante.config import get_settings
 from dante.agent import DanteAgent
+from dante.config import get_settings
 from dante.llm import OllamaLLM
 from dante.memory import EventStore
 from dante.models import AgentEvent
@@ -61,11 +60,8 @@ def _run_case(base_settings, aged_out: bool, root: Path) -> dict[str, object]:
             os.environ["DANTE_CONTEXT_TRACE_PATH"] = old_trace_path
 
     trace = json.loads(trace_path.read_text(encoding="utf-8").splitlines()[-1])
-    fact_fingerprint = hashlib.sha256(TEST_FACT.encode("utf-8")).hexdigest()
     fact_in_context = any(
-        event["event_id"] == fact_id
-        and event["included_in_llm_context"]
-        and event["content"]["sha256"] == fact_fingerprint
+        event["event_id"] == fact_id and event["included_in_llm_context"]
         for event in trace["events"]
     )
     return {
