@@ -48,8 +48,7 @@ def test_retrieval_does_not_promote_assistant_hallucinations(tmp_path):
     ))
 
     results = store.search_user_messages("qual é meu nome?", limit=5)
-    assert all(event.event_type == "user_message" for _, event in results)
-    assert all("Seu nome é Otávio" not in event.content for _, event in results)
+    assert results == []
 
 
 def test_retrieval_returns_no_results_without_token_overlap(tmp_path):
