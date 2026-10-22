@@ -1,7 +1,9 @@
 """Conversation orchestration with optional privacy-preserving context tracing."""
 import hashlib
+import hmac
 import json
 import os
+import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -9,6 +11,10 @@ from dante.config import Settings
 from dante.llm import OllamaLLM
 from dante.memory import EventStore
 from dante.models import AgentEvent, Message
+
+# A per-process secret prevents the trace fingerprints from being used as a simple
+# dictionary oracle for predictable messages such as names or short phrases.
+_TRACE_HMAC_KEY = secrets.token_bytes(32)
 
 
 class DanteAgent:
@@ -20,10 +26,13 @@ class DanteAgent:
 
     @staticmethod
     def _fingerprint(content: str) -> dict[str, int | str]:
-        """Describe content without recording the content itself."""
+        """Describe content without storing it or exposing an unkeyed content hash."""
+        fingerprint = hmac.new(
+            _TRACE_HMAC_KEY, content.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
         return {
             "characters": len(content),
-            "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            "hmac_sha256": fingerprint,
         }
 
     def _trace_context(
