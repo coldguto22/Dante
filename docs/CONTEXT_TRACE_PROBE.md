@@ -11,7 +11,7 @@ $env:DANTE_CONTEXT_TRACE_PATH = ".\data\context-trace.jsonl"
 python -m dante
 ```
 
-Each LLM call appends one JSON object. It records the selected database event IDs, event types, whether each event was included in the LLM context, the filter reason for excluded event types, the final message roles/order, character counts, and SHA-256 fingerprints. It **does not record message text**. Tracing is disabled unless the environment variable is set. The trace file may still reveal activity patterns and database paths, so keep it local and do not commit it.
+Each LLM call appends one JSON object. It records the selected database event IDs, event types, whether each event was included in the LLM context, the filter reason for excluded event types, the final message roles/order, character counts, and per-process keyed HMAC fingerprints. It **does not record message text**. The fingerprint key is generated in memory for each process, making fingerprints comparable within one run but not across separate runs. Tracing is disabled unless the environment variable is set. The trace file may still reveal activity patterns and database paths, so keep it local and do not commit it.
 
 Stop tracing in the current PowerShell session:
 
