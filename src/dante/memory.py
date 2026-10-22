@@ -1,7 +1,9 @@
 """Minimal SQLite event persistence."""
 import json
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
 
 from dante.models import AgentEvent
 
@@ -13,8 +15,18 @@ class EventStore:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
 
-    def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(str(self.db_path))
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """Yield a connection and always close it after committing or rolling back."""
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def _initialize(self) -> None:
         with self._connect() as conn:
