@@ -4,8 +4,8 @@ Run with: python -m dante.memory_audit
 This module never writes to the database.
 """
 import argparse
-import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from dante.config import get_settings
@@ -15,7 +15,8 @@ CONVERSATION_EVENT_TYPES = {"user_message", "assistant_message"}
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
-    connection = sqlite3.connect(f"file:{db_path.resolve().as_posix()}?mode=ro", uri=True)
+    uri = f"{db_path.resolve().as_uri()}?mode=ro"
+    connection = sqlite3.connect(uri, uri=True)
     connection.row_factory = sqlite3.Row
     return connection
 
@@ -34,7 +35,7 @@ def audit_database(db_path: Path, search: str | None = None,
         return 1
 
     try:
-        with _connect(resolved_path) as connection:
+        with closing(_connect(resolved_path)) as connection:
             table = connection.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='events'"
             ).fetchone()
@@ -67,13 +68,13 @@ def audit_database(db_path: Path, search: str | None = None,
                     print(f"    {row['content']}")
 
             recent = connection.execute(
-                "SELECT id, timestamp, event_type, content, metadata_json FROM events "
+                "SELECT id, timestamp, event_type, content FROM events "
                 "ORDER BY id DESC LIMIT ?",
                 (CONTEXT_EVENT_LIMIT,),
             ).fetchall()
             recent = list(reversed(recent))
             print(f"\nLast {CONTEXT_EVENT_LIMIT} stored events "
-                  f"(the current agent's retrieval window):")
+                  "(snapshot before the next user message is added):")
             if not recent:
                 print("  (none)")
             for row in recent:
@@ -81,12 +82,12 @@ def audit_database(db_path: Path, search: str | None = None,
                 if len(preview) > 180:
                     preview = preview[:177] + "..."
                 included = row["event_type"] in CONVERSATION_EVENT_TYPES
-                marker = "sent to LLM" if included else "stored, filtered from LLM context"
+                marker = "eligible for LLM context" if included else "stored, filtered from LLM context"
                 print(f"  #{row['id']} {row['event_type']} — {marker}")
                 print(f"    {preview}")
 
             if show_context:
-                print("\nConversation messages assembled from that window:")
+                print("\nConversation messages assembled from this snapshot:")
                 messages = [
                     {"role": "user" if row["event_type"] == "user_message" else "assistant",
                      "content": row["content"]}
@@ -101,7 +102,8 @@ def audit_database(db_path: Path, search: str | None = None,
             print("\nNotes:")
             print("  - The agent selects the last 12 stored events, not the last 12 conversation messages.")
             print("  - Non-conversation events can consume slots in that window and are then filtered out.")
-            print("  - This report shows stored/retrieved context, not whether the model used it correctly.")
+            print("  - The next turn adds the new user message before selecting its 12-event window.")
+            print("  - This report cannot establish whether the model used retrieved information correctly.")
             return 0
     except sqlite3.Error as exc:
         print(f"SQLite read error: {exc}")
@@ -119,7 +121,7 @@ def main() -> None:
     parser.add_argument(
         "--show-context",
         action="store_true",
-        help="Print full user/assistant message contents selected for the LLM context.",
+        help="Print full user/assistant message contents selected from the event window.",
     )
     args = parser.parse_args()
     raise SystemExit(audit_database(get_settings().db_path, args.search, args.show_context))
