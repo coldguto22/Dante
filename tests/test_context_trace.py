@@ -32,7 +32,7 @@ def test_context_trace_records_ids_and_fingerprints_without_message_text(tmp_pat
     assert trace["events"][0]["event_type"] == "user_message"
     assert trace["events"][0]["included_in_llm_context"] is True
     assert trace["events"][0]["content"]["characters"] == len(private_text)
-    assert trace["events"][0]["content"]["sha256"]
+    assert trace["events"][0]["content"]["hmac_sha256"]
     assert trace["events"][0]["event_id"] == 1
     assert trace["llm_messages"][1]["role"] == "user"
     assert trace["llm_messages"][1]["content"]["characters"] == len(private_text)
@@ -49,11 +49,12 @@ def test_context_trace_marks_filtered_event_types(tmp_path, monkeypatch):
 
     agent.respond("What do you remember?")
 
-    trace = json.loads(trace_path.read_text(encoding="utf-8").strip())
+    trace_text = trace_path.read_text(encoding="utf-8")
+    trace = json.loads(trace_text.strip())
     proposal = next(item for item in trace["events"] if item["event_type"] == "proposal")
     assert proposal["included_in_llm_context"] is False
     assert proposal["excluded_reason"] == "event_type_filtered"
-    assert "private proposal text" not in trace_path.read_text(encoding="utf-8")
+    assert "private proposal text" not in trace_text
 
 
 def test_event_store_recent_with_ids_preserves_chronological_order(tmp_path):
