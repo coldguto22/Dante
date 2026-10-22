@@ -26,8 +26,8 @@ def test_agent_context_is_limited_to_latest_twelve_stored_events(tmp_path):
         if message["role"] == "user"
     ]
 
-    # Seven exchanges create fourteen events. The last twelve stored events
-    # omit both events from the first exchange.
+    # On the seventh turn, the new user event is inserted before retrieval.
+    # The 12-event window retains the first assistant reply but drops Question 1.
     assert "Question 1" not in user_messages
     assert "Question 2" in user_messages
     assert "Question 7" in user_messages
