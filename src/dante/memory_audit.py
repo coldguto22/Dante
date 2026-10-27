@@ -101,7 +101,7 @@ def audit_database(db_path: Path, search: str | None = None,
             print("\nNotes:")
             print("  - The agent selects the last 12 user/assistant messages, filtering event types in SQL before applying the limit.")
             print("  - Initiative proposals and decisions remain in the audit log but do not consume conversation-context slots.")
-            print("  - The next turn adds the new user message before selecting its 12-event window.")
+            print("  - The next turn adds the new user message before selecting its 12-message conversation window.")
             print("  - This report cannot establish whether the model used retrieved information correctly.")
             return 0
     except sqlite3.Error as exc:
