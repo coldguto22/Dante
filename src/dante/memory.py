@@ -96,9 +96,12 @@ class EventStore:
         query: str,
         limit: int = 3,
         exclude_event_id: int | None = None,
+        exclude_event_ids: set[int] | None = None,
     ) -> list[tuple[int, AgentEvent]]:
-        """Find older user-authored messages by token overlap, newest first on ties.
+        """Find user-authored messages by token overlap, newest first on ties.
 
+        Exclusions are applied before ranking and truncating to the top-k results,
+        so recent events cannot occupy retrieval slots only to be discarded later.
         Assistant replies are intentionally excluded: model-generated claims are not
         promoted into user facts merely because they were saved in the event log.
         This is a lexical baseline, not semantic search or a verified fact store.
@@ -106,6 +109,10 @@ class EventStore:
         query_tokens = _tokens(query)
         if not query_tokens or limit < 1:
             return []
+
+        excluded_ids = set(exclude_event_ids or ())
+        if exclude_event_id is not None:
+            excluded_ids.add(exclude_event_id)
 
         with self._connect() as conn:
             rows = conn.execute(
@@ -116,7 +123,7 @@ class EventStore:
         scored: list[tuple[int, float, AgentEvent]] = []
         for row in rows:
             event_id, event = self._event_from_row(row)
-            if event_id == exclude_event_id:
+            if event_id in excluded_ids:
                 continue
             overlap = query_tokens & _tokens(event.content)
             if overlap:
