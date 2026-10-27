@@ -91,6 +91,25 @@ class EventStore:
         rows.reverse()
         return [self._event_from_row(row) for row in rows]
 
+    def recent_conversation_with_ids(self, limit: int = 12) -> list[tuple[int, AgentEvent]]:
+        """Return the latest conversation messages, ignoring internal event types.
+
+        The limit applies after filtering to user/assistant messages, so initiative
+        proposals and diagnostics cannot consume conversational context slots.
+        Results are returned in chronological order.
+        """
+        if limit < 1:
+            return []
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, timestamp, event_type, content, metadata_json "
+                "FROM events "
+                "WHERE event_type IN ('user_message', 'assistant_message') "
+                "ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+        rows.reverse()
+        return [self._event_from_row(row) for row in rows]
+
     def search_user_messages(
         self,
         query: str,
