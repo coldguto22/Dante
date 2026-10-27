@@ -1,4 +1,4 @@
-Structured data models used by the agent and its event log."
+"""Structured data models used by the agent and its event log."""
 from datetime import datetime, timezone
 from typing import Literal
 
