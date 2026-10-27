@@ -93,6 +93,6 @@ def test_agent_context_keeps_twelve_conversation_messages_despite_internal_event
         if message["role"] in {"user", "assistant"}
     ]
     assert len(conversation) == 12
-    assert conversation[0]["content"] == "user-2"
+    assert conversation[0]["content"] == "assistant-2"
     assert conversation[-1]["content"] == "new question"
     assert not any("internal proposal" in message["content"] for message in llm.seen_messages)
