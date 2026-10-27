@@ -52,3 +52,25 @@ def test_retrieval_excludes_recent_ids_before_applying_top_k(tmp_path):
     assert results
     assert results[0][0] == old_id
     assert "perseguir bolinhas de papel" in results[0][1].content
+
+
+def test_recent_conversation_limit_ignores_internal_events(tmp_path):
+    store = EventStore(tmp_path / "test.sqlite3")
+    for index in range(8):
+        store.add(AgentEvent(event_type="user_message", content=f"user-{index}"))
+        store.add(AgentEvent(event_type="assistant_message", content=f"assistant-{index}"))
+        store.add(AgentEvent(event_type="proposal", content=f"proposal-{index}"))
+        store.add(AgentEvent(event_type="initiative_decision", content=f"decision-{index}"))
+
+    selected = store.recent_conversation_with_ids(limit=12)
+    assert len(selected) == 12
+    assert all(event.event_type in {"user_message", "assistant_message"} for _, event in selected)
+    assert [event.content for _, event in selected] == [
+        item for index in range(2, 8) for item in (f"user-{index}", f"assistant-{index}")
+    ]
+
+
+def test_recent_conversation_non_positive_limit_returns_empty(tmp_path):
+    store = EventStore(tmp_path / "test.sqlite3")
+    store.add(AgentEvent(event_type="user_message", content="hello"))
+    assert store.recent_conversation_with_ids(limit=0) == []
