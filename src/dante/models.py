@@ -17,7 +17,7 @@ class Message(BaseModel):
 class ActivityProposal(BaseModel):
     summary: str = Field(min_length=1, max_length=500)
     rationale: str = Field(default="", max_length=1500)
-    action_type: Literal["respond", "reflect", "research_question", "stop"] = "reflect"
+    action_type: Literal["respond", "reflect", "research_question", "stop"] = "respond"
     requires_external_action: bool = False
 
 
