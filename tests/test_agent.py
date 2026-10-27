@@ -73,3 +73,26 @@ def test_agent_recovers_old_fact_when_recent_questions_fill_top_k(tmp_path):
     assert "perseguir bolinhas de papel" in recovered_context
     assert "sessão=old-session" in recovered_context
     assert "data=" in recovered_context
+
+
+def test_agent_context_keeps_twelve_conversation_messages_despite_internal_events(tmp_path):
+    settings = Settings(db_path=tmp_path / "agent.sqlite3")
+    store = EventStore(settings.db_path)
+    for index in range(8):
+        store.add(AgentEvent(event_type="user_message", content=f"user-{index}"))
+        store.add(AgentEvent(event_type="assistant_message", content=f"assistant-{index}"))
+        store.add(AgentEvent(event_type="proposal", content=f"internal proposal {index}"))
+        store.add(AgentEvent(event_type="initiative_decision", content=f"internal decision {index}"))
+
+    llm = FakeLLM("New answer")
+    agent = DanteAgent(settings, llm=llm, store=store)
+    agent.respond("new question")
+
+    conversation = [
+        message for message in llm.seen_messages
+        if message["role"] in {"user", "assistant"}
+    ]
+    assert len(conversation) == 12
+    assert conversation[0]["content"] == "assistant-2"
+    assert conversation[-1]["content"] == "new question"
+    assert not any("internal proposal" in message["content"] for message in llm.seen_messages)

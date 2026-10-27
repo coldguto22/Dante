@@ -69,11 +69,12 @@ def audit_database(db_path: Path, search: str | None = None,
 
             recent = connection.execute(
                 "SELECT id, timestamp, event_type, content FROM events "
+                "WHERE event_type IN ('user_message', 'assistant_message') "
                 "ORDER BY id DESC LIMIT ?",
                 (CONTEXT_EVENT_LIMIT,),
             ).fetchall()
             recent = list(reversed(recent))
-            print(f"\nLast {CONTEXT_EVENT_LIMIT} stored events "
+            print(f"\nLast {CONTEXT_EVENT_LIMIT} conversation messages "
                   "(snapshot before the next user message is added):")
             if not recent:
                 print("  (none)")
@@ -81,9 +82,7 @@ def audit_database(db_path: Path, search: str | None = None,
                 preview = row["content"].replace("\n", " ")
                 if len(preview) > 180:
                     preview = preview[:177] + "..."
-                included = row["event_type"] in CONVERSATION_EVENT_TYPES
-                marker = "eligible for LLM context" if included else "stored, filtered from LLM context"
-                print(f"  #{row['id']} {row['event_type']} — {marker}")
+                print(f"  #{row['id']} {row['event_type']} — eligible for LLM context")
                 print(f"    {preview}")
 
             if show_context:
@@ -100,9 +99,9 @@ def audit_database(db_path: Path, search: str | None = None,
                     print(f"  [{message['role']}] {message['content']}")
 
             print("\nNotes:")
-            print("  - The agent selects the last 12 stored events, not the last 12 conversation messages.")
-            print("  - Non-conversation events can consume slots in that window and are then filtered out.")
-            print("  - The next turn adds the new user message before selecting its 12-event window.")
+            print("  - The agent selects the last 12 user/assistant messages, filtering event types in SQL before applying the limit.")
+            print("  - Initiative proposals and decisions remain in the audit log but do not consume conversation-context slots.")
+            print("  - The next turn adds the new user message before selecting its 12-message conversation window.")
             print("  - This report cannot establish whether the model used retrieved information correctly.")
             return 0
     except sqlite3.Error as exc:

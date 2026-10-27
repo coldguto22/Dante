@@ -115,7 +115,7 @@ class DanteAgent:
             )
         )
 
-        selected = self.store.recent_with_ids(limit=12)
+        selected = self.store.recent_conversation_with_ids(limit=12)
         recent_ids = {event_id for event_id, _ in selected}
         retrieved = self.store.search_user_messages(
             user_message.content,

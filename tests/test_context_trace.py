@@ -38,7 +38,7 @@ def test_context_trace_records_ids_and_fingerprints_without_message_text(tmp_pat
     assert trace["llm_messages"][1]["content"]["characters"] == len(private_text)
 
 
-def test_context_trace_marks_filtered_event_types(tmp_path, monkeypatch):
+def test_context_trace_excludes_internal_events_from_selected_context(tmp_path, monkeypatch):
     trace_path = tmp_path / "context.jsonl"
     monkeypatch.setenv("DANTE_CONTEXT_TRACE_PATH", str(trace_path))
     settings = Settings(db_path=tmp_path / "events.sqlite3")
@@ -51,9 +51,8 @@ def test_context_trace_marks_filtered_event_types(tmp_path, monkeypatch):
 
     trace_text = trace_path.read_text(encoding="utf-8")
     trace = json.loads(trace_text.strip())
-    proposal = next(item for item in trace["events"] if item["event_type"] == "proposal")
-    assert proposal["included_in_llm_context"] is False
-    assert proposal["excluded_reason"] == "event_type_filtered"
+    assert all(item["event_type"] != "proposal" for item in trace["events"])
+    assert all(item["event_type"] in {"user_message", "assistant_message"} for item in trace["events"])
     assert "private proposal text" not in trace_text
 
 
