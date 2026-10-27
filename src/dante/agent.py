@@ -4,6 +4,7 @@ import hmac
 import json
 import os
 import secrets
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -23,6 +24,8 @@ class DanteAgent:
         self.settings = settings
         self.llm = llm or OllamaLLM(settings)
         self.store = store or EventStore(settings.db_path)
+        # A new identifier per agent instance distinguishes runs across restarts.
+        self.session_id = uuid.uuid4().hex
 
     @staticmethod
     def _fingerprint(content: str) -> dict[str, int | str]:
@@ -68,11 +71,21 @@ class DanteAgent:
         trace = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "model": self.settings.model,
+            "model_options": {
+                "temperature": self.settings.temperature,
+                "seed": self.settings.seed,
+            },
             "database_path": str(self.settings.db_path),
+            "session_id": self.session_id,
             "selected_event_ids": [event_id for event_id, _ in selected],
             "retrieved_memory_event_ids": [event_id for event_id, _ in retrieved],
             "retrieved_memories": [
-                {"event_id": event_id, "content": self._fingerprint(event.content)}
+                {
+                    "event_id": event_id,
+                    "timestamp": event.timestamp.isoformat(),
+                    "session_id": event.metadata.get("session_id"),
+                    "content": self._fingerprint(event.content),
+                }
                 for event_id, event in retrieved
             ],
             "system_prompt": self._fingerprint(messages[0]["content"]),
@@ -95,23 +108,30 @@ class DanteAgent:
     def respond(self, user_text: str) -> str:
         user_message = Message(role="user", content=user_text.strip())
         current_event_id = self.store.add(
-            AgentEvent(event_type="user_message", content=user_message.content)
+            AgentEvent(
+                event_type="user_message",
+                content=user_message.content,
+                metadata={"session_id": self.session_id},
+            )
         )
 
         selected = self.store.recent_with_ids(limit=12)
         recent_ids = {event_id for event_id, _ in selected}
-        retrieved = [
-            (event_id, event)
-            for event_id, event in self.store.search_user_messages(
-                user_message.content, limit=3, exclude_event_id=current_event_id
-            )
-            if event_id not in recent_ids
-        ]
+        retrieved = self.store.search_user_messages(
+            user_message.content,
+            limit=3,
+            exclude_event_id=current_event_id,
+            exclude_event_ids=recent_ids,
+        )
 
         messages = [{"role": "system", "content": self.settings.system_prompt}]
         if retrieved:
             memory_lines = [
-                f"- [evento #{event_id}] {event.content}"
+                (
+                    f"- [evento #{event_id}; data={event.timestamp.isoformat()}; "
+                    f"sessão={event.metadata.get('session_id', 'desconhecida')}] "
+                    f"{event.content}"
+                )
                 for event_id, event in retrieved
             ]
             messages.append({
@@ -137,9 +157,16 @@ class DanteAgent:
         try:
             answer = self.llm.chat(messages)
         except Exception as exc:
-            self.store.add(AgentEvent(event_type="error", content=str(exc),
-                                      metadata={"component": "llm"}))
+            self.store.add(AgentEvent(
+                event_type="error",
+                content=str(exc),
+                metadata={"component": "llm", "session_id": self.session_id},
+            ))
             raise
 
-        self.store.add(AgentEvent(event_type="assistant_message", content=answer))
+        self.store.add(AgentEvent(
+            event_type="assistant_message",
+            content=answer,
+            metadata={"session_id": self.session_id},
+        ))
         return answer
