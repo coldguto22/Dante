@@ -13,10 +13,17 @@ class OllamaLLM:
     def __init__(self, settings: Settings, client: Client | None = None) -> None:
         self.model = settings.model
         self.client = client or Client(host=settings.ollama_host)
+        self.options: dict[str, int | float] = {
+            "temperature": settings.temperature,
+        }
+        if settings.seed is not None:
+            self.options["seed"] = settings.seed
 
     def chat(self, messages: list[dict[str, str]]) -> str:
         try:
-            response = self.client.chat(model=self.model, messages=messages)
+            response = self.client.chat(
+                model=self.model, messages=messages, options=self.options
+            )
             content = response.message.content
             if not content or not content.strip():
                 raise LLMError("The local model returned an empty response.")
@@ -35,6 +42,7 @@ class OllamaLLM:
                 model=self.model,
                 messages=messages,
                 format=schema.model_json_schema(),
+                options=self.options,
             )
             content = response.message.content
             if not content:
