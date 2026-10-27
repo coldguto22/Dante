@@ -3,7 +3,7 @@ from dante.memory_audit import audit_database
 from dante.models import AgentEvent
 
 
-def test_audit_reports_recent_window_and_filtered_event_types(tmp_path, capsys):
+def test_audit_reports_recent_conversation_window_without_internal_events(tmp_path, capsys):
     path = tmp_path / "audit.sqlite3"
     store = EventStore(path)
     store.add(AgentEvent(event_type="user_message", content="Meu nome é Otávio"))
@@ -15,10 +15,11 @@ def test_audit_reports_recent_window_and_filtered_event_types(tmp_path, capsys):
 
     assert status == 0
     assert "Total events: 3" in output
-    assert "stored, filtered from LLM context" in output
+    assert "Last 12 conversation messages" in output
+    assert "eligible for LLM context" in output
     assert "[user] Meu nome é Otávio" in output
     assert "[assistant] Olá" in output
-    assert "temporary test error" in output
+    assert "temporary test error" not in output
 
 
 def test_audit_search_finds_older_event(tmp_path, capsys):
