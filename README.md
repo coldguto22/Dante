@@ -26,42 +26,48 @@ These are hypotheses and questions, not claims that Dante already has these capa
 7. **Treat personality as a research question.** Do not hard-code a complete personality or a list of interests before there is evidence that they are useful.
 8. **Avoid unsupported claims.** A system describing feelings, keeping a diary, or reflecting on itself is not by itself evidence of subjective experience.
 
-## Technical direction
+## Current implementation
 
-The initial implementation is expected to use:
+- A local interactive conversation baseline using Ollama.
+- SQLite event history and lexical retrieval of older user-authored memories.
+- A code-owned capability registry that distinguishes available, planned, restricted, and unavailable capabilities.
+- A bounded initiative prototype that asks the local model for up to three structured proposals, authorizes them against the registry, selects one using a deterministic novelty baseline, and records the decision.
+- The initiative prototype is dry-run only. It does not execute proposals or access web, arbitrary files, shell commands, or external services.
 
-- **Python** for the agent loop and experimental infrastructure.
-- **Ollama** to run a selected language model locally.
-- **Pydantic** for validating structured model proposals.
-- **SQLite and ordinary files** for initial state persistence and event logs.
+## Run locally
 
-The exact model should be selected based on available hardware and measured quality, latency, memory use, and stability. Frameworks such as CrewAI and vector or graph databases can be evaluated later if a concrete need justifies their added complexity.
+Install the project and development dependencies in the active virtual environment:
 
-## Planned structure
-
-```text
-.
-├── README.md
-├── .gitignore
-├── docs/
-│   └── FOUNDATIONS.md
-├── experiments/
-└── tests/
+```powershell
+python -m pip install -e ".[dev]"
 ```
 
-## Milestones
+Start the interactive conversation:
 
-1. Document hypotheses, constraints, and evaluation criteria.
-2. Build a minimal local conversational baseline and verify model connectivity.
-3. Require structured, validated activity proposals without granting them unrestricted execution.
-4. Add a controlled loop that records state, proposal, decision, action, and outcome.
-5. Test persistence and vary one motivation mechanism at a time.
-6. Add tools and more sophisticated memory only when experiments demonstrate a need.
+```powershell
+python -m dante
+```
 
-## Safety and scope
+Simulate one initiative cycle:
 
-Begin with a small, explicit set of permitted actions. Keep execution separate from proposal generation, record failures, and preserve a way to stop the loop. Access to files, shell commands, navigation, external services, or irreversible operations must be considered and constrained explicitly before it is introduced.
+```powershell
+python -m dante.initiative
+```
 
-## Current status
+Simulate up to three cycles:
 
-**Documentation and experimental design.** No functional agent implementation is claimed at this stage.
+```powershell
+python -m dante.initiative --cycles 3
+```
+
+The initiative cycle uses the configured Ollama model and the same `DANTE_DB_PATH` SQLite database. It records candidates as `proposal` events and the selection as an `initiative_decision` event. To inspect recent records, use `python -m dante.memory_audit`.
+
+Configuration is environment-based. Existing settings include `OLLAMA_HOST`, `DANTE_MODEL`, `DANTE_DB_PATH`, `DANTE_TEMPERATURE`, and optional `DANTE_SEED`. Ollama must be running and the configured model must be installed.
+
+## Safety and evaluation scope
+
+The registry is defined in code, not by the model. A proposal being authorized means only that it may be recorded and considered for selection in dry-run; it does not mean the action was performed. Execution mode is deliberately rejected until an explicit executor and permission model are designed.
+
+The novelty policy is only an initial measurable baseline. It can favor novelty over usefulness, and lexical similarity is imperfect. Tests cover schema/registry authorization, rejection of external-action requests, bounded cycles, and event recording. Passing these tests would establish software behavior, not consciousness or general autonomy.
+
+See [docs/FOUNDATIONS.md](docs/FOUNDATIONS.md) for the project's research framing and [docs/MEMORY_DIAGNOSTICS.md](docs/MEMORY_DIAGNOSTICS.md) for memory inspection.
