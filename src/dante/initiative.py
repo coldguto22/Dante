@@ -52,6 +52,16 @@ class InitiativeRunner:
     def cycle(self) -> dict[str, object]:
         cycle_id = uuid.uuid4().hex
         recent_summaries = self._recent_selected_summaries()
+        registry_context = [
+            {
+                "name": capability.name,
+                "status": capability.status,
+                "description": capability.description,
+                "supported_action_types": list(capability.supported_action_types),
+                "external_effects": capability.external_effects,
+            }
+            for capability in self.registry.all()
+        ]
         prompt = (
             "You are generating candidate activities for Dante's bounded local initiative experiment. "
             "Return 1 to 3 distinct, small proposals in the required schema. Only propose internal "
@@ -60,6 +70,7 @@ class InitiativeRunner:
             "actions. Set requires_external_action=false only when the proposal truly needs no external "
             "action. Prefer a concrete useful question over vague self-description. Avoid repeating "
             "recent selected summaries when possible. These are proposals, not actions being executed.\n"
+            f"Registered capabilities: {json.dumps(registry_context, ensure_ascii=False)}\n"
             f"Recent selected summaries: {json.dumps(recent_summaries, ensure_ascii=False)}"
         )
         batch = self.llm.structured(
