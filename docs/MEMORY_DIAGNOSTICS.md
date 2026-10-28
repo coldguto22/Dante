@@ -34,7 +34,7 @@ Be aware that this can print private conversation content in the terminal. The d
 - It selects the latest 12 `user_message`/`assistant_message` events for chronological conversation context. Filtering happens in SQLite before applying the limit.
 - It also searches older `user_message` events for lexical overlap with the new user message (up to three results).
 - `EventStore.recent_conversation_with_ids()` selects the latest 12 conversation messages by insertion ID and returns them chronologically.
-- Initiative proposals, decisions, and other internal event types remain in the audit log but do not consume conversation-context slots.
+- Initiative prompts, proposals, decisions, results, and other internal event types remain in the audit log but do not consume conversation-context slots.
 - When older matches are found outside the recent window, Dante adds a separate system message containing those user-authored historical statements and their event IDs.
 - The LLM receives the configured system prompt, any recovered-memory message, and the selected conversation messages. It does not directly query SQLite.
 - After the LLM replies, Dante stores the assistant response as another event.

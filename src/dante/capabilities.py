@@ -1,8 +1,8 @@
 """Code-owned capability registry and deterministic proposal authorization.
 
-The registry describes what the program supports. Model output cannot add capabilities
-or grant itself permission. An authorized proposal may be recorded/selected in dry-run;
-this module does not execute any action.
+Model output cannot add capabilities or grant itself permission. This registry decides
+whether a proposal may be considered; the separate executor independently decides
+whether an action type has an implemented execution path.
 """
 from typing import Literal
 
@@ -38,11 +38,11 @@ class CapabilityRegistry:
                 description="Generate a conversational response using the configured local model.",
                 status="available",
                 supported_action_types=("respond",),
-                notes="Available in the interactive conversation path; initiative cycles only record proposals.",
+                notes="Available in the interactive conversation path; initiative execution is handled separately.",
             ),
             Capability(
                 name="reflection",
-                description="Propose an internal reflection or review question; no external action is performed.",
+                description="Run a bounded local-model reflection; no external action is performed.",
                 status="available",
                 supported_action_types=("reflect",),
             ),
@@ -107,8 +107,8 @@ class CapabilityRegistry:
     ) -> AuthorizationDecision:
         """Authorize only known, available, non-external proposal types.
 
-        allowed means the proposal may be recorded and considered for selection. It
-        never means that the proposed activity has been executed.
+        allowed means only that the proposal may be recorded and considered. It does
+        not establish that an executor exists or that an action was performed.
         """
         capability = self._by_action.get(proposal.action_type)
         if capability is None:
@@ -131,7 +131,7 @@ class CapabilityRegistry:
             return AuthorizationDecision(
                 allowed=False,
                 capability_name=capability.name,
-                reason="Execution mode is not implemented; only dry-run is supported.",
+                reason="The capability registry cannot authorize execution without an executor check.",
             )
         return AuthorizationDecision(
             allowed=True,

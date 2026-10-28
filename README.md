@@ -32,7 +32,8 @@ These are hypotheses and questions, not claims that Dante already has these capa
 - SQLite event history and lexical retrieval of older user-authored memories.
 - A code-owned capability registry that distinguishes available, planned, restricted, and unavailable capabilities.
 - A bounded initiative prototype that asks the local model for up to three structured proposals, authorizes them against the registry, selects one using a deterministic novelty baseline, and records the decision.
-- The initiative prototype is dry-run only. It does not execute proposals or access web, arbitrary files, shell commands, or external services.
+- An opt-in execution mode that runs only the selected `reflect` action through the configured local model, records its result or error, and supplies recent outcomes to later cycles. Other action types remain unexecuted.
+- The initiative prototype does not access web, arbitrary files, shell commands, or external services.
 
 ## Run locally
 
@@ -60,14 +61,23 @@ Simulate up to three cycles:
 python -m dante.initiative --cycles 3
 ```
 
-The initiative cycle uses the configured Ollama model and the same `DANTE_DB_PATH` SQLite database. It records candidates as `proposal` events and the selection as an `initiative_decision` event. To inspect recent records, use `python -m dante.memory_audit`.
+Run up to three cycles with bounded local reflection execution:
+
+```powershell
+$env:DANTE_DB_PATH = "data/initiative-experiment.sqlite3"
+python -m dante.initiative --cycles 3 --mode execute
+```
+
+Use a separate database path for experiments so initiative events do not mix with the conversation history. The experiment still requires Ollama and the configured local model.
+
+The initiative cycle uses the configured Ollama model and the `DANTE_DB_PATH` SQLite database. It records prompts/configuration as `initiative_prompt` events, candidates as `proposal` events, and the selection as an `initiative_decision` event. Execute mode additionally records `initiative_result` events for local reflections, including errors, and supplies recent results to subsequent proposals and reflections. To inspect recent records, use `python -m dante.memory_audit`.
 
 Configuration is environment-based. Existing settings include `OLLAMA_HOST`, `DANTE_MODEL`, `DANTE_DB_PATH`, `DANTE_TEMPERATURE`, and optional `DANTE_SEED`. Ollama must be running and the configured model must be installed.
 
 ## Safety and evaluation scope
 
-The registry is defined in code, not by the model. A proposal being authorized means only that it may be recorded and considered for selection in dry-run; it does not mean the action was performed. Execution mode is deliberately rejected until an explicit executor and permission model are designed.
+The registry is defined in code, not by the model. A proposal being authorized means it may be recorded and considered for selection; it does not itself mean the action was performed. Execute mode supports only local `reflect` actions through the configured model. Other action types are not executed; web, arbitrary file access, shell commands, and external services remain unavailable to the initiative loop.
 
 The novelty policy is only an initial measurable baseline. It can favor novelty over usefulness, and lexical similarity is imperfect. Tests cover schema/registry authorization, rejection of external-action requests, bounded cycles, and event recording. Passing these tests would establish software behavior, not consciousness or general autonomy.
 
-See [docs/FOUNDATIONS.md](docs/FOUNDATIONS.md) for the project's research framing and [docs/MEMORY_DIAGNOSTICS.md](docs/MEMORY_DIAGNOSTICS.md) for memory inspection.
+See [docs/FOUNDATIONS.md](docs/FOUNDATIONS.md) for the project's research framing, [docs/MEMORY_DIAGNOSTICS.md](docs/MEMORY_DIAGNOSTICS.md) for memory inspection, and [docs/INITIATIVE_EXECUTION.md](docs/INITIATIVE_EXECUTION.md) for the bounded execution experiment and evaluation procedure.

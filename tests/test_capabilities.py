@@ -38,11 +38,11 @@ def test_external_action_request_is_rejected_even_if_action_type_looks_internal(
     assert "External actions" in decision.reason
 
 
-def test_execution_mode_is_rejected_because_no_executor_exists():
+def test_registry_alone_does_not_authorize_execution():
     registry = CapabilityRegistry()
     proposal = ActivityProposal(summary="Reflect", action_type="reflect")
 
     decision = registry.authorize_proposal(proposal, dry_run=False)
 
     assert decision.allowed is False
-    assert "not implemented" in decision.reason
+    assert "cannot authorize execution" in decision.reason
