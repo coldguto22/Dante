@@ -43,3 +43,28 @@ For this experiment, a reflection is provisionally useful when it answers or nar
 The local `llama3.2` model was run with seed `41` and temperature `0.8` for three cycles in each condition. The baseline used `dry-run-reflection`; execute mode used the same proposal schema in a separate SQLite database. Both runs generated nine proposals and selected three reflections. The baseline recorded three decisions and no results. Execute mode recorded three completed reflection results, three decisions, and six prompts (proposal-generation and reflection prompts for each cycle). All three cycle IDs had matching result and decision records. A read-only audit confirmed that neither experiment database contained conversation messages.
 
 No exact duplicate proposal summaries appeared in either three-cycle run. A post-run pairwise Jaccard check over the nine proposals in each condition found no pairs at or above 0.5. The execute database's proposal-generation prompts contain the preceding cycle's result in cycles 2 and 3, which verifies that the program supplied outcomes to later decisions. However, the generated reflections were not consistently useful: cycle 2 claimed that recent summaries were missing even though the prompt included the prior selected summary, and suggested implementing history storage that already exists. Under the rubric above, execution and data propagation passed, while correct interpretation and useful adaptation remain unproven and this run contains a concrete failure. This is a small integration probe, not a controlled statistical result.
+
+## Follow-up local comparison (2026-10-29)
+
+An additional three-cycle comparison was run with `llama3.2`, temperature `0.8`, and seed
+`41`. The `dry-run-reflection` and `execute` conditions used separate, new SQLite databases;
+both began without conversation or initiative history. The baseline recorded nine proposals,
+three decisions, and no results. Execute recorded nine proposals, three completed results,
+three decisions, and six prompts. The initial proposal-generation prompts and recorded model
+configuration matched across conditions. The generated batches still differed, so this single
+pair does not establish a controlled causal effect or reliable reproducibility.
+
+Manual review against the rubric above found mixed behavior. In the first execute reflection,
+the model correctly noticed that the selected proposal had no rationale. In the next cycle,
+it claimed a rationale had been supplied and that model performance had improved, although
+neither claim was supported by the stored proposal or any measured outcome. In the third cycle,
+it said prior selected summaries were absent even though the prompt contained them. Later
+proposals echoed the earlier rationale theme, which is evidence of topical carryover but not
+of accurate or useful adaptation. The model also repeated a suggested local check.
+
+The observed result is that bounded execution, result persistence, and result delivery to
+later proposal prompts worked in this run. Correct context use, evidence-grounded reflection,
+and improvement over the no-result baseline remain unproven. No motivation variable or
+conversation integration should be added on the strength of this run alone; repeat comparisons
+and manual scoring should come first. The experimental databases are separate from Dante's
+main conversation database and contain no conversation events.
