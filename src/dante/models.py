@@ -46,3 +46,15 @@ class AgentEvent(BaseModel):
     ]
     content: str = Field(min_length=1, max_length=20000)
     metadata: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+
+
+class UserMemoryRecord(BaseModel):
+    """A verbatim user-authored memory excerpt linked to its source event."""
+
+    id: int
+    source_event_id: int
+    source_event_type: Literal["user_message"]
+    source_timestamp: datetime
+    created_at: datetime
+    session_id: str | None = None
+    content: str = Field(min_length=1, max_length=20000)

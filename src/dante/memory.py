@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from dante.models import AgentEvent
+from dante.models import AgentEvent, UserMemoryRecord, utc_now
 
 
 _STOP_WORDS = {
@@ -41,6 +41,7 @@ class EventStore:
         """Yield a connection and always close it after committing or rolling back."""
         conn = sqlite3.connect(str(self.db_path))
         try:
+            conn.execute("PRAGMA foreign_keys = ON")
             yield conn
             conn.commit()
         except Exception:
@@ -60,6 +61,20 @@ class EventStore:
                     metadata_json TEXT NOT NULL
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS user_memories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_event_id INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(source_event_id) REFERENCES events(id),
+                    UNIQUE(source_event_id, content)
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_user_memories_source "
+                "ON user_memories(source_event_id)"
+            )
 
     def add(self, event: AgentEvent) -> int:
         with self._connect() as conn:
@@ -70,6 +85,66 @@ class EventStore:
                  json.dumps(event.metadata, ensure_ascii=False)),
             )
             return int(cursor.lastrowid)
+
+    def add_user_memory(self, source_event_id: int, content: str) -> UserMemoryRecord:
+        """Save an exact excerpt of a user message with its event provenance.
+
+        This is an explicit curation API. It does not extract or verify facts, and
+        it cannot promote assistant or initiative output into user-authored memory.
+        """
+        excerpt = content.strip()
+        if not excerpt:
+            raise ValueError("Memory content must be a non-empty verbatim excerpt.")
+
+        with self._connect() as conn:
+            source = conn.execute(
+                "SELECT timestamp, event_type, content, metadata_json "
+                "FROM events WHERE id = ?", (source_event_id,)
+            ).fetchone()
+            if source is None or source[1] != "user_message":
+                raise ValueError("Memory source must be an existing user_message event.")
+            if excerpt not in source[2]:
+                raise ValueError("Memory content must be a verbatim excerpt of its user_message source.")
+
+            conn.execute(
+                "INSERT OR IGNORE INTO user_memories "
+                "(source_event_id, content, created_at) VALUES (?, ?, ?)",
+                (source_event_id, excerpt, utc_now().isoformat()),
+            )
+            row = conn.execute(
+                "SELECT m.id, m.source_event_id, e.event_type, e.timestamp, "
+                "e.metadata_json, m.content, m.created_at "
+                "FROM user_memories AS m JOIN events AS e ON e.id = m.source_event_id "
+                "WHERE m.source_event_id = ? AND m.content = ?",
+                (source_event_id, excerpt),
+            ).fetchone()
+        return self._user_memory_from_row(row)
+
+    @staticmethod
+    def _user_memory_from_row(row: tuple) -> UserMemoryRecord:
+        metadata = json.loads(row[4])
+        return UserMemoryRecord(
+            id=int(row[0]),
+            source_event_id=int(row[1]),
+            source_event_type=row[2],
+            source_timestamp=row[3],
+            session_id=metadata.get("session_id"),
+            content=row[5],
+            created_at=row[6],
+        )
+
+    def list_user_memories(self, limit: int = 100) -> list[UserMemoryRecord]:
+        """List explicitly curated user excerpts in source-event order."""
+        if limit < 1:
+            return []
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT m.id, m.source_event_id, e.event_type, e.timestamp, "
+                "e.metadata_json, m.content, m.created_at "
+                "FROM user_memories AS m JOIN events AS e ON e.id = m.source_event_id "
+                "ORDER BY e.id ASC, m.id ASC LIMIT ?", (limit,)
+            ).fetchall()
+        return [self._user_memory_from_row(row) for row in rows]
 
     @staticmethod
     def _event_from_row(row: tuple) -> tuple[int, AgentEvent]:
