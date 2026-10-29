@@ -25,10 +25,24 @@ class ActivityProposalBatch(BaseModel):
     proposals: list[ActivityProposal] = Field(min_length=1, max_length=3)
 
 
+class ExecutableActivityProposal(BaseModel):
+    """Proposal schema limited to the action types supported by execute mode."""
+
+    summary: str = Field(min_length=1, max_length=500)
+    rationale: str = Field(default="", max_length=1500)
+    action_type: Literal["reflect", "stop"]
+    requires_external_action: bool = False
+
+
+class ExecutableActivityProposalBatch(BaseModel):
+    proposals: list[ExecutableActivityProposal] = Field(min_length=1, max_length=3)
+
+
 class AgentEvent(BaseModel):
     timestamp: datetime = Field(default_factory=utc_now)
     event_type: Literal[
-        "user_message", "assistant_message", "proposal", "initiative_decision", "error"
+        "user_message", "assistant_message", "proposal", "initiative_decision",
+        "initiative_prompt", "initiative_result", "error"
     ]
     content: str = Field(min_length=1, max_length=20000)
     metadata: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
