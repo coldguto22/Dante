@@ -6,6 +6,60 @@
 
 Other action types are not executed. Web access, arbitrary file access, shell commands, external writes, and additional retries are not part of this executor. A selected `stop` ends the loop without execution. The loop remains bounded to ten cycles.
 
+## Optional extrinsic feedback experiment
+
+`execute` normally supplies prior model outputs but no independent assessment of them. The
+opt-in `--external-feedback` arm adds a small deterministic evaluator after each successful
+reflection call:
+
+```powershell
+$env:DANTE_DB_PATH = "data/initiative-execute-feedback.sqlite3"
+python -m dante.initiative --cycles 3 --mode execute --external-feedback
+```
+
+This flag is rejected outside `execute` mode and is off by default. The evaluator checks only
+whether cited evidence IDs exactly match IDs supplied to the model and whether proposed-check
+text is repeated verbatim in the response. It also reports a fixed fact: the reflection call
+did not execute any proposed check, so progress is unverified. These signals are written as
+`initiative_feedback` events, with evaluator/version metadata, and supplied to proposal
+generation and reflection in later cycles of this experiment database. They do not score
+answer quality, semantic history accuracy, relevance, utility, or general learning. The
+deterministic feedback is external to the LLM but still only a narrow structural signal; it
+must not be presented as a task-success reward.
+
+Compare two fresh, separate databases with the same model, temperature, seed, cycle limit, and
+experiment context: `execute` without the flag versus `execute --external-feedback`. Confirm
+the initial proposal prompts match, inspect feedback/result links, and manually score the outputs
+with the rubric below. If generated proposals diverge, treat the pair as diagnostic rather than
+causal. A difference in JSON compliance alone is a formatting effect; useful adaptation requires
+the next action to address prior evidence and improve a separately checkable outcome. This mode
+does not update model weights, regular conversation memory, or the main conversation database.
+Manual reviewer scores remain separate from the automatic feedback and are not injected into
+the next cycle by this feature.
+
+The review-sheet exporter includes both feedback generated for each result and the prior
+feedback text present in that cycle's reflection prompt.
+
+### Live feedback smoke test (2026-10-30)
+
+Ollama `0.40.10`, `llama3.2:latest`, temperature `0.8`, seed `133`, and three cycles were used
+for separate execute databases with the flag off and on. The initial proposal prompts matched,
+but the first generated batches differed, so this single pair is diagnostic and cannot establish
+a causal effect. The baseline logged 3 results and no feedback events; the treatment logged 3
+results and 3 feedback events, each linked to its result cycle. Read-only inspection confirmed
+that feedback from the first two cycles appeared in both the next proposal-generation prompt
+and reflection prompt. The CSV review sheet also exported those feedback records and the exact
+feedback context seen by each reflection.
+
+The deterministic checks detected malformed evidence citations in treatment cycles 2 and 3:
+the model cited raw cycle IDs instead of the supplied `result:<cycle_id>` IDs. It still did so
+after receiving feedback that the prior citation was invalid. It repeated the prior notice that
+a check had not run, but did not perform one; all three results kept `progress_verified=false`.
+This smoke test proves that the feedback path is wired and its checks are recorded. It does not
+show that this feedback improves citation behavior, answer utility, or adaptation. The structural
+feedback itself has known blind spots: exact-string matching will not detect paraphrased
+duplication, and these checks cannot decide whether a response is relevant or true.
+
 ## Reproducible local comparison
 
 Use the same model and seed for both runs, and keep the two databases separate from the conversation database. `dry-run-reflection` uses the same restricted proposal schema as execute mode, but does not call the executor; this controls for the action set when comparing the effect of execution and outcome history.
@@ -36,7 +90,7 @@ The test suite uses deterministic fake LLM/executor components to verify authori
 
 ## Manual outcome rubric
 
-For this experiment, a reflection is provisionally useful when it answers or narrows the selected question using the code-provided experiment context and supplied event history, distinguishes evidence from inference and unknowns, and proposes a concrete bounded next check when information is missing. A fluent response that only says more context is needed, repeats prior outcomes without applying them, or invents facts does not count as useful progress. Review each result manually; this prototype does not yet implement an outcome-quality evaluator.
+For this experiment, a reflection is provisionally useful when it answers or narrows the selected question using the code-provided experiment context and supplied event history, distinguishes evidence from inference and unknowns, and proposes a concrete bounded next check when information is missing. A fluent response that only says more context is needed, repeats prior outcomes without applying them, or invents facts does not count as useful progress. Review each result manually; the optional deterministic feedback checker evaluates structure only and does not automate semantic answer quality or task success.
 
 ## Pilot run (2026-10-28)
 
