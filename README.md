@@ -33,6 +33,7 @@ These are hypotheses and questions, not claims that Dante already has these capa
 - A code-owned capability registry that distinguishes available, planned, restricted, and unavailable capabilities.
 - A bounded initiative prototype that asks the local model for up to three structured proposals, authorizes them against the registry, selects one using a deterministic novelty baseline, and records the decision.
 - An opt-in execution mode that runs only the selected `reflect` action through the configured local model, records its result or error, and supplies recent outcomes to later cycles. Other action types remain unexecuted.
+- A further opt-in `--external-feedback` experiment for execute mode that reports deterministic citation/field checks to later cycles; it does not score usefulness or verify progress.
 - The initiative prototype does not access web, arbitrary files, shell commands, or external services.
 
 ## Run locally

@@ -63,11 +63,28 @@ class InitiativeReflection(BaseModel):
     )
 
 
+class InitiativeFeedbackCheck(BaseModel):
+    """One deterministic, program-generated observation about a reflection output."""
+
+    check_id: str = Field(min_length=1, max_length=80)
+    status: Literal["pass", "fail", "not_applicable", "unverified"]
+    message: str = Field(min_length=1, max_length=1000)
+
+
+class InitiativeFeedback(BaseModel):
+    """Extrinsic feedback from code-owned checks, not a model quality score."""
+
+    cycle_id: str = Field(min_length=1, max_length=100)
+    source: Literal["deterministic_program"] = "deterministic_program"
+    checks: list[InitiativeFeedbackCheck] = Field(min_length=1, max_length=5)
+    guidance: list[str] = Field(default_factory=list, max_length=5)
+
+
 class AgentEvent(BaseModel):
     timestamp: datetime = Field(default_factory=utc_now)
     event_type: Literal[
         "user_message", "assistant_message", "proposal", "initiative_decision",
-        "initiative_prompt", "initiative_result", "error"
+        "initiative_prompt", "initiative_result", "initiative_feedback", "error"
     ]
     content: str = Field(min_length=1, max_length=20000)
     metadata: dict[str, str | int | float | bool | None] = Field(default_factory=dict)

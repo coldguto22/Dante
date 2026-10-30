@@ -36,8 +36,8 @@ class FakeExecutor:
     def supports(self, action_type):
         return action_type == "reflect"
 
-    def execute(self, proposal, *, recent_results, recent_selected_summaries, on_prompt=None):
-        self.calls.append((proposal, recent_results))
+    def execute(self, proposal, *, recent_results, recent_selected_summaries, recent_feedback=None, on_prompt=None):
+        self.calls.append((proposal, recent_results, recent_feedback or []))
         if on_prompt:
             on_prompt([{"role": "user", "content": proposal.summary}])
         if self.error:
@@ -68,6 +68,8 @@ def test_cycle_records_candidates_and_selected_decision_without_execution(tmp_pa
     assert json.loads(decisions[0].content)["execution"] == "none_dry_run"
     assert decisions[0].metadata["execution"] == "none_dry_run"
     assert runner.llm.calls[0][1] is ActivityProposalBatch
+    assert "Prior program-generated feedback" not in runner.llm.calls[0][0][0]["content"]
+    assert all(event.event_type != "initiative_feedback" for event in events)
 
 
 def test_cycle_rejects_candidates_that_request_external_actions(tmp_path):
@@ -195,7 +197,7 @@ def test_execute_mode_records_executor_errors_without_aborting_cycle(tmp_path):
 
 def test_execution_records_invalid_model_evidence_ids_separately(tmp_path):
     class CitingExecutor(FakeExecutor):
-        def execute(self, proposal, *, recent_results, recent_selected_summaries, on_prompt=None):
+        def execute(self, proposal, *, recent_results, recent_selected_summaries, recent_feedback=None, on_prompt=None):
             return InitiativeReflection(response="Claim", used_evidence_ids=["result:invented"])
 
     proposal = ActivityProposal(summary="Review context", action_type="reflect")
