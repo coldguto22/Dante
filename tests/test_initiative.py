@@ -11,6 +11,7 @@ from dante.models import (
     AgentEvent,
     ExecutableActivityProposal,
     ExecutableActivityProposalBatch,
+    InitiativeReflection,
 )
 
 
@@ -41,7 +42,7 @@ class FakeExecutor:
             on_prompt([{"role": "user", "content": proposal.summary}])
         if self.error:
             raise self.error
-        return self.result
+        return InitiativeReflection(response=self.result)
 
 
 def test_cycle_records_candidates_and_selected_decision_without_execution(tmp_path):
@@ -138,7 +139,10 @@ def test_execute_mode_runs_only_reflection_and_records_result(tmp_path):
     result = runner.cycle(execute=True)
 
     assert result["execution"]["status"] == "completed"
-    assert result["execution"]["result"] == "Observed limitation: retrieval is lexical."
+    assert result["execution"]["result"]["response"] == "Observed limitation: retrieval is lexical."
+    assert result["execution"]["action_performed"] is True
+    assert result["execution"]["response_status"] == "received"
+    assert result["execution"]["progress_verified"] is False
     events = store.recent(limit=10)
     outcome = next(event for event in events if event.event_type == "initiative_result")
     decision = next(event for event in events if event.event_type == "initiative_decision")
@@ -189,6 +193,24 @@ def test_execute_mode_records_executor_errors_without_aborting_cycle(tmp_path):
     assert json.loads(store.recent(limit=1)[0].content)["execution"] == "error"
 
 
+def test_execution_records_invalid_model_evidence_ids_separately(tmp_path):
+    class CitingExecutor(FakeExecutor):
+        def execute(self, proposal, *, recent_results, recent_selected_summaries, on_prompt=None):
+            return InitiativeReflection(response="Claim", used_evidence_ids=["result:invented"])
+
+    proposal = ActivityProposal(summary="Review context", action_type="reflect")
+    runner = InitiativeRunner(
+        Settings(db_path=tmp_path / "initiative.sqlite3"),
+        llm=FakeStructuredLLM(ActivityProposalBatch(proposals=[proposal])),
+        store=EventStore(tmp_path / "initiative.sqlite3"),
+        executor=CitingExecutor(),
+    )
+    result = runner.cycle(execute=True)
+    assert result["execution"]["evidence_validation"] == {
+        "valid_ids": [], "rejected_ids": ["result:invented"]
+    }
+
+
 def test_execute_mode_does_not_run_actions_without_an_executor(tmp_path):
     proposal = ActivityProposal(summary="Formulate a research question", action_type="research_question")
     store = EventStore(tmp_path / "initiative.sqlite3")
@@ -222,7 +244,7 @@ def test_previous_execution_results_are_supplied_to_later_proposals(tmp_path):
     runner.cycle(execute=True)
 
     assert "The retrieval is lexical." in llm.calls[1][0][0]["content"]
-    assert executor.calls[1][1][0]["result"] == "The retrieval is lexical."
+    assert '"response": "The retrieval is lexical."' in executor.calls[1][1][0]["result"]
 
 
 def test_duplicate_candidates_in_same_batch_are_rejected(tmp_path):

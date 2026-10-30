@@ -74,11 +74,16 @@ class InitiativeRunner:
             except (TypeError, json.JSONDecodeError):
                 continue
             results.append({
+                "evidence_id": f"result:{payload.get('cycle_id', 'unknown')}",
                 "cycle_id": payload.get("cycle_id"),
                 "action_type": payload.get("action_type"),
                 "summary": payload.get("summary"),
                 "status": payload.get("status"),
-                "result": str(payload.get("result", ""))[:1500],
+                "result": (
+                    json.dumps(payload["result"], ensure_ascii=False)
+                    if isinstance(payload.get("result"), dict)
+                    else str(payload.get("result", ""))
+                )[:1500],
             })
             if len(results) >= limit:
                 break
@@ -225,7 +230,7 @@ class InitiativeRunner:
                                 "cycle_id": cycle_id,
                                 "phase": "reflection_execution",
                                 "mode": "execute",
-                                "schema": "plain_text",
+                                "schema": "InitiativeReflection",
                                 "model": self.settings.model,
                                 "temperature": self.settings.temperature,
                                 "seed": self.settings.seed,
@@ -242,8 +247,24 @@ class InitiativeRunner:
                         "cycle_id": cycle_id,
                         "action_type": selected.action_type,
                         "summary": selected.summary,
+                        # completed means the reflection call returned; it does not
+                        # mean that a proposed check ran or useful progress was verified.
                         "status": "completed",
-                        "result": reflection,
+                        "response_status": "received",
+                        "action_performed": True,
+                        "progress_verified": False,
+                        "verification": None,
+                        "evidence_validation": {
+                            "valid_ids": [
+                                evidence_id for evidence_id in reflection.used_evidence_ids
+                                if evidence_id in {str(item.get("evidence_id")) for item in recent_results}
+                            ],
+                            "rejected_ids": [
+                                evidence_id for evidence_id in reflection.used_evidence_ids
+                                if evidence_id not in {str(item.get("evidence_id")) for item in recent_results}
+                            ],
+                        },
+                        "result": reflection.model_dump(mode="json"),
                     }
                 except Exception as exc:
                     execution_result = {
@@ -354,9 +375,19 @@ def main(argv: Sequence[str] | None = None) -> None:
         print(f"  Reason: {result['reason']}")
         execution = result.get("execution")
         if isinstance(execution, dict):
-            print(f"  Execution: {execution['status']}")
             if execution.get("status") == "completed":
-                print(f"  Result: {execution['result']}")
+                print(f"  Reflection call: {execution['response_status']}")
+                report = execution["result"]
+                print(f"  Response: {report['response']}")
+                print(f"  Evidence IDs claimed: {report['used_evidence_ids']}")
+                print(f"  Evidence IDs accepted: {execution['evidence_validation']['valid_ids']}")
+                print(f"  Evidence IDs rejected: {execution['evidence_validation']['rejected_ids']}")
+                print(f"  Inferences: {report['inferences']}")
+                print(f"  Unknowns: {report['unknowns']}")
+                print(f"  Proposed checks (not executed): {report['proposed_checks']}")
+                print("  Progress verified: no (reflection response only)")
+            else:
+                print(f"  Execution error: {execution['result']}")
         elif args.mode != "execute":
             print("  Execution: none (dry-run)")
         elif isinstance(selected, ActivityProposal) and selected.action_type == "stop":

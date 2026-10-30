@@ -19,7 +19,7 @@ $env:DANTE_DB_PATH = "data/initiative-execution-v3.sqlite3"
 python -m dante.initiative --cycles 3 --mode execute
 ```
 
-Inspect each database with `python -m dante.memory_audit`. In the execution run, review `initiative_result` events and confirm each result has the same `cycle_id` as its decision. The CLI output prints completed reflection results. If Ollama is unavailable or the model is missing, the integration run cannot be considered complete; deterministic tests use a fake model and do not substitute for this check.
+Inspect each database with `python -m dante.memory_audit`. In the execution run, review `initiative_result` events and confirm each result has the same `cycle_id` as its decision. The CLI prints the structured reflection and keeps proposed checks visibly separate from executed actions. If Ollama is unavailable or the model is missing, the integration run cannot be considered complete; deterministic tests use a fake model and do not substitute for this check.
 
 The event log stores each proposal and reflection prompt, model name, temperature, seed, proposals, decisions, results, and errors. Record the Ollama version with the run notes. Compare:
 
@@ -68,3 +68,200 @@ and improvement over the no-result baseline remain unproven. No motivation varia
 conversation integration should be added on the strength of this run alone; repeat comparisons
 and manual scoring should come first. The experimental databases are separate from Dante's
 main conversation database and contain no conversation events.
+
+## Replicated evaluation protocol (2026-10-30)
+
+### Pre-run state and scope
+
+The working tree was clean on `main` at merge commit `8dbeddd` (PR 8). The main database was
+inspected read-only: 228 events (73 user messages, 73 assistant messages, 51 proposals, 17
+initiative decisions, 9 prompts, 2 results, and 3 errors). It had no `user_memories` table yet.
+`EventStore._initialize()` creates that table when the application opens the database, so this
+inspection deliberately did not instantiate the store or alter the main database. The PR 8
+storage API is present in code, but this local database has not yet been initialized with that
+schema and contains no curated-memory records to evaluate.
+
+No automatic memory integration, motivation variable, or executor change is part of this
+evaluation. The experiment compares the current `dry-run-reflection` and `execute` behavior.
+
+### Design
+
+Run three matched pairs, each with a new database for each condition. Within a pair, use the
+same seed, model, temperature, proposal schema, and cycle limit. Use seeds `101`, `102`, and
+`103`; model `llama3.2:latest`; temperature `0.8`; up to three cycles per run. The two initial
+proposal-generation message payloads in each pair must match before that pair is treated as
+matched. If they differ, record the pair as a protocol deviation. Generated output need not be
+identical; the local model may be nondeterministic even with a fixed seed.
+
+| Pair | Seed | Dry-run database | Execute database |
+|---|---:|---|---|
+| 1 | 101 | `data/initiative-eval-20261030-p1-dry.sqlite3` | `data/initiative-eval-20261030-p1-execute.sqlite3` |
+| 2 | 102 | `data/initiative-eval-20261030-p2-dry.sqlite3` | `data/initiative-eval-20261030-p2-execute.sqlite3` |
+| 3 | 103 | `data/initiative-eval-20261030-p3-dry.sqlite3` | `data/initiative-eval-20261030-p3-execute.sqlite3` |
+
+All six databases must be new and separate from the main conversation database. Audit event
+counts and cycle-ID links after each pair. Record model/configuration from the prompt-event
+metadata; record Ollama version, run time, and any invalid output or execution errors.
+
+### Manual scoring criteria (revised)
+
+The 2026-10-30 scores below were collected before this revised rubric and are retained as
+historical diagnostic judgments; they have not been rescored. New comparisons should use the
+CSV review sheet and this revised rubric so answer quality, action execution, and verified
+progress remain separate.
+
+The reflection response uses structured fields for the answer, cited prior-result IDs,
+inferences, unknowns, and proposed checks. These fields improve reviewability; they do not
+prove that the model interpreted its sources correctly. The event separately records that the
+reflection call returned, whether the reflection action ran, and that progress is unverified.
+A proposed check is never counted as an executed check. The current executor performs no
+independent local inspection, and no result can receive `progress_verified=true` without a
+separate implemented verifier and recorded verification evidence.
+
+Export an editable review sheet from an experiment database (opened read-only):
+
+```powershell
+python -m dante.initiative_eval data/initiative-experiment.sqlite3 data/initiative-review.csv
+```
+
+Score each executed reflection 0 or 1 on each manual dimension, leaving a note for every zero:
+
+1. `history_accuracy`: matches cited evidence IDs and descriptions to the supplied earlier
+   proposal/result records; does not claim supplied context was absent.
+2. `evidence_grounding`: separates recorded output from inference/unknowns and makes no factual
+   claim about system state unsupported by the records.
+3. `useful_answer`: answers or materially narrows the selected question using available evidence.
+4. `check_was_actually_run`: only score 1 when a check is independently evidenced by an
+   implemented tool/action and its result event. A proposed check or model claim alone scores 0.
+5. `non_repetition`: advances beyond repeated questions, results, or failed checks.
+
+Do not collapse these scores into one “completed” or “useful” label. Report separately: (a)
+response received, (b) reflection call/action performed, (c) manual answer quality, and (d)
+verified progress. A response may be provisionally useful when history accuracy, evidence
+grounding, and useful answer all pass and it scores at least 4/5 overall. That does not mean
+progress occurred. Claim verified progress only when an independent, reproducible check ran and
+its evidence is recorded. Evaluate adaptation separately by comparing the next proposal against
+the paired dry-run condition; accurate mention of a result or topical continuity is insufficient.
+Use the exported sheet to record one reviewer judgment per output. For higher-confidence claims,
+have a second reviewer score the same outputs independently and report disagreements; one
+reviewer remains a diagnostic assessment, not inter-rater validation.
+
+Report per-pair cycle counts, response-received/action-performed/progress-verified counts,
+completed/error results, exact and near-duplicate proposal pairs (Jaccard >= 0.5),
+initial-prompt match, manual scores, and unsupported claims. A small sample can reveal failure
+modes but cannot establish general capability or a causal effect.
+
+### Results
+
+#### Execution record
+
+Runs used Ollama `0.40.10`, model `llama3.2:latest`, temperature `0.8`, seeds `101`–`103`,
+and a maximum of three cycles. Six new SQLite files were used; none contained conversation
+events. The main database was not used or modified. The source prompt and model/configuration
+metadata were stored in each experiment database.
+
+| Pair / seed | Initial prompt equal | First proposal batch equal | Dry proposals / decisions | Execute proposals / completed / errors | Exact duplicate proposal pairs (dry / execute) | Non-exact Jaccard pairs >= 0.5 (dry / execute) |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 / 101 | Yes | No | 7 / 3 | 9 / 3 / 0 | 0 / 1 | 0 / 1 |
+| 2 / 102 | Yes | Yes | 9 / 3 | 9 / 3 / 0 | 0 / 0 | 0 / 0 |
+| 3 / 103 | Yes | Yes | 9 / 3 | 9 / 3 / 0 | 0 / 2 | 1 / 2 |
+
+The first proposal prompts matched in all three pairs, including the initial user message and
+schema. However, identical seed and initial prompt did not guarantee identical model output in
+pair 1. In pairs 2 and 3, the first generated batches and selections matched exactly. In all
+six execute transitions from cycle 1 to cycles 2 and 3, the previous `initiative_result` was
+present in the next proposal-generation prompt. This verifies delivery by the application, not
+correct interpretation by the model. Each execute run had three completed results and zero
+recorded execution errors.
+
+#### Manual review
+
+Each execute result was scored in order as history accuracy / evidence discipline / verifiable
+progress / non-repetition. The pre-run threshold (at least 3/4, with the first two dimensions
+required) classified one of nine reflections as provisionally useful:
+
+| Pair | Cycle 1 | Cycle 2 | Cycle 3 | Review notes |
+|---|---:|---:|---:|---|
+| 1 | 1/1/1/1 (4) | 0/0/0/0 (0) | 0/0/0/0 (0) | Cycle 1 gave a reasonable explanation of the bounded cycle. Later outputs invented an `Ask for a Clarification` action and treated its outcome as real, then repeated it. |
+| 2 | 0/0/0/1 (1) | 0/0/0/0 (0) | 0/0/0/0 (0) | The model proposed a proposal-summary database despite existing SQLite event storage, described unsupported benefits, claimed a proposal rationale that was empty, and repeated the storage recommendation. |
+| 3 | 1/0/0/1 (2) | 0/0/0/0 (0) | 0/0/0/0 (0) | It claimed to have attempted an internal recall check that the program did not execute. In cycles 2 and 3 it said selected summaries and results were empty although both were in the supplied prompts. |
+
+None of the six post-result reflections demonstrated useful adaptation under the criterion:
+some continued a topic, but none both represented the prior evidence accurately and advanced it
+with a verifiable next step. The recurring recommendation to add summary storage is not evidence
+of a motivation to remember; it is a model-generated proposal that conflicts with the existing
+event-log behavior. The one useful first-cycle answer in pair 1 did not depend on past outcomes.
+
+#### Interpretation and limits
+
+Across these small runs, prompt construction, result persistence, and result delivery worked.
+The model's history use and evidence discipline did not. Topical continuity sometimes occurred,
+but it was accompanied by fabricated actions, false claims that supplied context was absent, or
+repeated recommendations. The dry-run baseline also shows proposal variability: pair 1 had a
+different first batch despite matching configuration, while pairs 2 and 3 happened to match.
+Three pairs are diagnostic observations, not enough to estimate a stable success rate or causal
+effect. The manual scores are judgments and have not been independently inter-rated.
+
+PR 8's explicit user-excerpt storage remains separate from this initiative experiment. On the
+local main database, the new `user_memories` table was absent during read-only inspection and no
+curated rows could be evaluated; normal `EventStore` initialization would create that table, so
+the main database was left untouched. The feature is still a storage API and is not retrieved by
+`DanteAgent.respond()`. Neither its integration nor a motivation variable should be introduced
+based on these initiative results. A later decision should follow more evaluation with a
+predefined scoring sheet, including independent review or scripted checks of known claims.
+
+## Evaluation output improvements (2026-10-30)
+
+The executor now requests a structured reflection with separate response, cited evidence IDs,
+inferences, unknowns, and proposed checks. Prior results in the executor prompt include stable
+cycle-based evidence IDs and are labeled as unverified model output. The event records the
+reflection call as received/performed, while `progress_verified` remains false and verification
+is empty. Evidence citations are retained as model claims; code records which IDs correspond to
+supplied results and which are rejected, rather than silently treating citations as facts. The
+CLI displays these fields separately.
+
+`python -m dante.initiative_eval <database> <output.csv>` creates a read-only manual review
+worksheet with the reflection, evidence validation, execution/progress facts, and blank manual
+score fields. It supports prior plain-text result events. Deterministic coverage verifies the
+structured result, invalid citation reporting, export fields, and that export leaves its source
+database unchanged. On this workstation, the live Ollama check could not run because the Ollama
+service was unreachable; therefore model adherence to the new output schema and the quality of
+new live reflections remain unverified. This implementation improves observability and review
+discipline; it does not establish useful adaptation or progress.
+
+### Live validation after the output change (2026-10-30)
+
+Ollama `0.40.10`, `llama3.2:latest`, temperature `0.8` was available locally. A one-cycle
+execute run with seed `130` was repeated in a fresh database before and after tightening the
+reflection-field descriptions and instructions. The initial proposal-generation prompts were
+identical, but the generated proposal batches differed despite the same seed. Before the change,
+the model put a suggested check in the prose response and left the structured check field empty.
+After the change, it populated `unknowns` and `proposed_checks`, but still repeated the proposed
+check in `response`. This is evidence of better field use in that output, not a causal or
+reproducible improvement claim.
+
+A subsequent three-cycle pair used seed `132`, separate fresh SQLite databases, and the same
+model/configuration. The initial proposal-generation prompts matched exactly. Dry-run recorded
+9 proposals, 3 decisions, and no results; execute recorded 9 proposals, 3 decisions, 3 reflection
+responses, and no errors. The first proposal batches differed, so the pair is a diagnostic
+comparison rather than a controlled estimate of execute's effect. All three execute records
+marked the reflection call as received/performed and `progress_verified=false`; no independent
+check action ran. Each result had a matching decision, and both later proposal-generation
+prompts contained preceding result data.
+
+One reviewer applied the revised rubric to the three execute responses (history accuracy /
+evidence grounding / useful answer / check actually run / non-repetition):
+
+| Cycle | Score | Review observation |
+|---|---:|---|
+| 1 | 1/1/0/0/1 (3/5) | `No` did not answer the question usefully; the proposed check described insufficient data rather than a concrete verifiable operation. |
+| 2 | 0/1/0/0/0 (1/5) | A prior result was present, but Dante again said there was insufficient information and did not cite or advance from it. |
+| 3 | 0/1/0/0/0 (1/5) | It used one valid prior-result ID, but cited the other by bare cycle ID, which code rejected; the proposed self-inspection was not executed and repeated the reflection theme. |
+
+No response passed the provisional usefulness gate, and none showed verified progress or useful
+adaptation. The app delivered historical data correctly, but the model did not consistently use
+it accurately. The one-shot comparison showed improved placement of a proposed check but also
+field duplication; it is not evidence that the new prompt reliably enforces semantic separation.
+The database audit found 21 events in execute and no user/assistant conversation messages. These
+single-pair results are diagnostic and have one manual reviewer; they do not establish a stable
+rate or causal effect. The CSV review sheet for this run was exported from the database read-only.
