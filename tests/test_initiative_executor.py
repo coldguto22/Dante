@@ -40,6 +40,9 @@ def test_reflection_executor_uses_bounded_context_and_records_prompt():
     assert llm.schema is InitiativeReflection
     assert "Earlier selected question." in llm.messages[1]["content"]
     assert "no access" in llm.messages[0]["content"]
+    assert "Put only the direct answer in response" in llm.messages[0]["content"]
+    schema = InitiativeReflection.model_json_schema()
+    assert "Direct answer only" in schema["properties"]["response"]["description"]
 
 
 def test_reflection_executor_rejects_unimplemented_action_types():

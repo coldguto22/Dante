@@ -228,3 +228,40 @@ database unchanged. On this workstation, the live Ollama check could not run bec
 service was unreachable; therefore model adherence to the new output schema and the quality of
 new live reflections remain unverified. This implementation improves observability and review
 discipline; it does not establish useful adaptation or progress.
+
+### Live validation after the output change (2026-10-30)
+
+Ollama `0.40.10`, `llama3.2:latest`, temperature `0.8` was available locally. A one-cycle
+execute run with seed `130` was repeated in a fresh database before and after tightening the
+reflection-field descriptions and instructions. The initial proposal-generation prompts were
+identical, but the generated proposal batches differed despite the same seed. Before the change,
+the model put a suggested check in the prose response and left the structured check field empty.
+After the change, it populated `unknowns` and `proposed_checks`, but still repeated the proposed
+check in `response`. This is evidence of better field use in that output, not a causal or
+reproducible improvement claim.
+
+A subsequent three-cycle pair used seed `132`, separate fresh SQLite databases, and the same
+model/configuration. The initial proposal-generation prompts matched exactly. Dry-run recorded
+9 proposals, 3 decisions, and no results; execute recorded 9 proposals, 3 decisions, 3 reflection
+responses, and no errors. The first proposal batches differed, so the pair is a diagnostic
+comparison rather than a controlled estimate of execute's effect. All three execute records
+marked the reflection call as received/performed and `progress_verified=false`; no independent
+check action ran. Each result had a matching decision, and both later proposal-generation
+prompts contained preceding result data.
+
+One reviewer applied the revised rubric to the three execute responses (history accuracy /
+evidence grounding / useful answer / check actually run / non-repetition):
+
+| Cycle | Score | Review observation |
+|---|---:|---|
+| 1 | 1/1/0/0/1 (3/5) | `No` did not answer the question usefully; the proposed check described insufficient data rather than a concrete verifiable operation. |
+| 2 | 0/1/0/0/0 (1/5) | A prior result was present, but Dante again said there was insufficient information and did not cite or advance from it. |
+| 3 | 0/1/0/0/0 (1/5) | It used one valid prior-result ID, but cited the other by bare cycle ID, which code rejected; the proposed self-inspection was not executed and repeated the reflection theme. |
+
+No response passed the provisional usefulness gate, and none showed verified progress or useful
+adaptation. The app delivered historical data correctly, but the model did not consistently use
+it accurately. The one-shot comparison showed improved placement of a proposed check but also
+field duplication; it is not evidence that the new prompt reliably enforces semantic separation.
+The database audit found 21 events in execute and no user/assistant conversation messages. These
+single-pair results are diagnostic and have one manual reviewer; they do not establish a stable
+rate or causal effect. The CSV review sheet for this run was exported from the database read-only.

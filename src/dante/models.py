@@ -41,11 +41,26 @@ class ExecutableActivityProposalBatch(BaseModel):
 class InitiativeReflection(BaseModel):
     """Structured model response; fields describe claims, not verified progress."""
 
-    response: str = Field(min_length=1, max_length=4000)
-    used_evidence_ids: list[str] = Field(default_factory=list, max_length=10)
-    inferences: list[str] = Field(default_factory=list, max_length=10)
-    unknowns: list[str] = Field(default_factory=list, max_length=10)
-    proposed_checks: list[str] = Field(default_factory=list, max_length=5)
+    response: str = Field(
+        min_length=1, max_length=4000,
+        description="Direct answer only. Do not put interpretations, missing information, or proposed checks here.",
+    )
+    used_evidence_ids: list[str] = Field(
+        default_factory=list, max_length=10,
+        description="IDs of supplied historical outcomes actually used; cite only exact supplied IDs.",
+    )
+    inferences: list[str] = Field(
+        default_factory=list, max_length=10,
+        description="Interpretations that go beyond the recorded evidence; state each as an inference.",
+    )
+    unknowns: list[str] = Field(
+        default_factory=list, max_length=10,
+        description="Information needed to answer but absent from the supplied context.",
+    )
+    proposed_checks: list[str] = Field(
+        default_factory=list, max_length=5,
+        description="Concrete checks that could be run later. These are proposals, never checks already performed.",
+    )
 
 
 class AgentEvent(BaseModel):
