@@ -39,6 +39,20 @@ Be aware that this can print private conversation content in the terminal. The d
 - The LLM receives the configured system prompt, any recovered-memory message, and the selected conversation messages. It does not directly query SQLite.
 - After the LLM replies, Dante stores the assistant response as another event.
 
+### Explicit user-memory records (initial storage layer)
+
+`EventStore.add_user_memory(source_event_id, content)` can store an explicitly curated,
+verbatim excerpt from an existing `user_message`. Each row points back to its source event,
+including the original timestamp and session metadata when listed. The store rejects
+assistant messages, initiative results, missing source events, and excerpts that do not
+occur exactly in the cited user message. Adding the same excerpt twice is idempotent.
+
+These rows preserve who supplied the text and where it came from; they do not establish that
+the user's statement is independently true. The existing event log remains intact, and this
+new table does not automatically extract, approve, or retrieve memories. `DanteAgent.respond()`
+still uses the existing recent-message window and lexical search over user-authored events.
+Conversation integration and any user-facing memory management remain later work.
+
 Because the diagnostic runs between turns, its latest-12 listing is a snapshot of conversation messages, not a capture of a past LLM request. On the next turn, Dante first inserts the new user message and then selects the latest 12 conversation messages. Use `--show-context` to inspect the selected message content, while remembering this timing distinction.
 
 ## How to interpret the results

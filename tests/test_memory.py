@@ -1,3 +1,5 @@
+import pytest
+
 from dante.memory import EventStore
 from dante.models import AgentEvent
 
@@ -74,3 +76,89 @@ def test_recent_conversation_non_positive_limit_returns_empty(tmp_path):
     store = EventStore(tmp_path / "test.sqlite3")
     store.add(AgentEvent(event_type="user_message", content="hello"))
     assert store.recent_conversation_with_ids(limit=0) == []
+
+def test_user_memory_keeps_verbatim_source_provenance(tmp_path):
+    store = EventStore(tmp_path / "test.sqlite3")
+    source_id = store.add(AgentEvent(
+        event_type="user_message",
+        content="Meu nome é Otávio. Gosto de baixo elétrico.",
+        metadata={"session_id": "session-1"},
+    ))
+
+    record = store.add_user_memory(source_id, "Gosto de baixo elétrico.")
+
+    assert record.source_event_id == source_id
+    assert record.source_event_type == "user_message"
+    assert record.session_id == "session-1"
+    assert record.content == "Gosto de baixo elétrico."
+    assert record.created_at is not None
+    assert store.list_user_memories() == [record]
+
+
+def test_user_memory_rejects_assistant_and_initiative_sources(tmp_path):
+    store = EventStore(tmp_path / "test.sqlite3")
+    assistant_id = store.add(AgentEvent(
+        event_type="assistant_message", content="Seu nome é Otávio."
+    ))
+    initiative_id = store.add(AgentEvent(
+        event_type="initiative_result", content="O usuário se chama Otávio."
+    ))
+
+    with pytest.raises(ValueError, match="user_message"):
+        store.add_user_memory(assistant_id, "Seu nome é Otávio.")
+    with pytest.raises(ValueError, match="user_message"):
+        store.add_user_memory(initiative_id, "O usuário se chama Otávio.")
+
+
+def test_user_memory_rejects_claims_not_present_verbatim_in_source(tmp_path):
+    store = EventStore(tmp_path / "test.sqlite3")
+    source_id = store.add(AgentEvent(
+        event_type="user_message", content="Gosto de baixo elétrico."
+    ))
+
+    with pytest.raises(ValueError, match="verbatim"):
+        store.add_user_memory(source_id, "Gosto de baixo elétrico e guitarra.")
+
+
+def test_user_memory_add_is_idempotent_and_list_is_chronological(tmp_path):
+    store = EventStore(tmp_path / "test.sqlite3")
+    first_id = store.add(AgentEvent(event_type="user_message", content="Minha gata se chama Alicia."))
+    second_id = store.add(AgentEvent(event_type="user_message", content="Moro em Santo André."))
+
+    first = store.add_user_memory(first_id, "Minha gata se chama Alicia.")
+    duplicate = store.add_user_memory(first_id, "Minha gata se chama Alicia.")
+    second = store.add_user_memory(second_id, "Moro em Santo André.")
+
+    assert duplicate.id == first.id
+    assert store.list_user_memories() == [first, second]
+    assert store.list_user_memories(limit=1) == [first]
+
+
+def test_user_memory_schema_migration_preserves_existing_events(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(path) as conn:
+        conn.execute("""
+            CREATE TABLE events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                content TEXT NOT NULL,
+                metadata_json TEXT NOT NULL
+            )
+        """)
+        conn.execute(
+            "INSERT INTO events (timestamp, event_type, content, metadata_json) "
+            "VALUES (?, ?, ?, ?)",
+            ("2026-10-01T12:00:00+00:00", "user_message", "Moro em Santo André.", "{}"),
+        )
+
+    store = EventStore(path)
+    assert store.recent()[0].content == "Moro em Santo André."
+    record = store.add_user_memory(1, "Moro em Santo André.")
+
+    assert record.source_event_id == 1
+    with sqlite3.connect(path) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM user_memories").fetchone()[0] == 1
