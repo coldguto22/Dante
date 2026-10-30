@@ -1,4 +1,5 @@
 """Explicit executor for the bounded local initiative action set."""
+import json
 from collections.abc import Callable
 
 from dante.llm import OllamaLLM
@@ -22,6 +23,7 @@ class InitiativeExecutor:
         *,
         recent_results: list[dict[str, object]],
         recent_selected_summaries: list[str],
+        recent_feedback: list[dict[str, object]] | None = None,
         on_prompt: Callable[[list[dict[str, str]]], None] | None = None,
     ) -> InitiativeReflection:
         """Run one bounded reflection with recent outcomes as explicitly labeled context."""
@@ -40,6 +42,12 @@ class InitiativeExecutor:
             f"- Earlier selected proposal: {summary}"
             for summary in recent_selected_summaries[-5:]
         ) or "- No earlier initiative decisions are available."
+        feedback_history = "\n".join(
+            f"- {json.dumps(item, ensure_ascii=False)}"
+            for item in (recent_feedback or [])[-3:]
+        )
+        if recent_feedback is not None and not feedback_history:
+            feedback_history = "- No earlier program-generated feedback is available."
         messages = [
             {
                 "role": "system",
@@ -62,7 +70,10 @@ class InitiativeExecutor:
                     "supplied records. Do not claim "
                     "to access tools, files, the web, or external services. Distinguish what "
                     "the evidence says from inference and unknowns. If context is insufficient, "
-                    "state what is missing and propose a concrete local check. Keep the result concise."
+                    "state what is missing and propose a concrete local check. Keep the result concise. "
+                    "Program feedback, if supplied, comes from deterministic code checks; it covers "
+                    "only citation IDs, exact field duplication, and whether a check actually ran. "
+                    "It is not a score of answer usefulness or general correctness."
                 ),
             },
             {
@@ -72,6 +83,11 @@ class InitiativeExecutor:
                     f"Proposal rationale: {proposal.rationale or '(none supplied)'}\n"
                     f"Recent selected proposal summaries:\n{selected_history}\n"
                     f"Prior outcomes (historical model output, not verified facts):\n{history}"
+                    + (
+                        "\nPrior program-generated feedback (limited structural checks):\n"
+                        f"{feedback_history}"
+                        if recent_feedback is not None else ""
+                    )
                 ),
             },
         ]

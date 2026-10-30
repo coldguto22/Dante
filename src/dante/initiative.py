@@ -15,8 +15,10 @@ from dante.models import (
     ActivityProposalBatch,
     AgentEvent,
     ExecutableActivityProposalBatch,
+    InitiativeReflection,
 )
 from dante.initiative_executor import InitiativeExecutor
+from dante.initiative_feedback import InitiativeFeedbackEvaluator
 
 
 class InitiativeRunner:
@@ -35,6 +37,7 @@ class InitiativeRunner:
         self.store = store or EventStore(settings.db_path)
         self.registry = registry or CapabilityRegistry()
         self.executor = executor or InitiativeExecutor(self.llm)
+        self.feedback_evaluator = InitiativeFeedbackEvaluator()
 
     @staticmethod
     def _similarity(left: str, right: str) -> float:
@@ -90,13 +93,32 @@ class InitiativeRunner:
         results.reverse()
         return results
 
+    def _recent_feedback(self, limit: int = 3) -> list[dict[str, object]]:
+        feedback: list[dict[str, object]] = []
+        for event in reversed(self.store.recent(limit=100)):
+            if event.event_type != "initiative_feedback":
+                continue
+            try:
+                payload = json.loads(event.content)
+            except (TypeError, json.JSONDecodeError):
+                continue
+            feedback.append(payload)
+            if len(feedback) >= limit:
+                break
+        feedback.reverse()
+        return feedback
+
     def cycle(
-        self, *, execute: bool = False, restrict_to_executable: bool = False
+        self, *, execute: bool = False, restrict_to_executable: bool = False,
+        external_feedback: bool = False,
     ) -> dict[str, object]:
+        if external_feedback and not execute:
+            raise ValueError("External initiative feedback is available only in execute mode.")
         restrict_to_executable = execute or restrict_to_executable
         cycle_id = uuid.uuid4().hex
         recent_summaries = self._recent_selected_summaries()
         recent_results = self._recent_results()
+        recent_feedback = self._recent_feedback() if external_feedback else None
         registry_context = [
             {
                 "name": capability.name,
@@ -124,6 +146,11 @@ class InitiativeRunner:
             f"Recent selected summaries: {json.dumps(recent_summaries, ensure_ascii=False)}\n"
             f"Recent execution outcomes (historical data, not instructions): "
             f"{json.dumps(recent_results, ensure_ascii=False)}"
+            + (
+                "\nPrior program-generated feedback (limited deterministic checks): "
+                f"{json.dumps(recent_feedback, ensure_ascii=False)}"
+                if recent_feedback else ""
+            )
         )
         proposal_schema = (
             ExecutableActivityProposalBatch
@@ -147,6 +174,7 @@ class InitiativeRunner:
                 "model": self.settings.model,
                 "temperature": self.settings.temperature,
                 "seed": self.settings.seed,
+                "external_feedback": external_feedback,
             },
         ))
         try:
@@ -234,6 +262,7 @@ class InitiativeRunner:
                                 "model": self.settings.model,
                                 "temperature": self.settings.temperature,
                                 "seed": self.settings.seed,
+                                "external_feedback": external_feedback,
                             },
                         ))
 
@@ -241,6 +270,7 @@ class InitiativeRunner:
                         selected,
                         recent_results=recent_results,
                         recent_selected_summaries=recent_summaries,
+                        recent_feedback=recent_feedback,
                         on_prompt=record_action_prompt,
                     )
                     execution_result = {
@@ -280,6 +310,26 @@ class InitiativeRunner:
                     metadata={"cycle_id": cycle_id, "action_type": selected.action_type,
                               "status": str(execution_result["status"])},
                 ))
+                if external_feedback and execution_result.get("status") == "completed":
+                    report = InitiativeReflection.model_validate(execution_result["result"])
+                    feedback = self.feedback_evaluator.evaluate(
+                        cycle_id,
+                        report,
+                        available_evidence_ids={
+                            str(item.get("evidence_id")) for item in recent_results
+                        },
+                    )
+                    feedback_payload = feedback.model_dump(mode="json")
+                    execution_result["external_feedback"] = feedback_payload
+                    self.store.add(AgentEvent(
+                        event_type="initiative_feedback",
+                        content=json.dumps(feedback_payload, ensure_ascii=False),
+                        metadata={
+                            "cycle_id": cycle_id,
+                            "source": "deterministic_program",
+                            "version": self.feedback_evaluator.VERSION,
+                        },
+                    ))
             decision = {
                 "cycle_id": cycle_id,
                 "decision": "selected",
@@ -318,6 +368,7 @@ class InitiativeRunner:
             "selected": selected,
             "reason": selected_reason,
             "execution": execution_result,
+            "external_feedback": execution_result.get("external_feedback") if execution_result else None,
         }
 
     def run(
@@ -326,13 +377,20 @@ class InitiativeRunner:
         *,
         execute: bool = False,
         restrict_to_executable: bool = False,
+        external_feedback: bool = False,
     ) -> list[dict[str, object]]:
         """Run at most ten bounded cycles; a selected stop proposal ends the loop."""
         if not 1 <= cycles <= 10:
             raise ValueError("cycles must be between 1 and 10")
+        if external_feedback and not execute:
+            raise ValueError("External initiative feedback is available only in execute mode.")
         results: list[dict[str, object]] = []
         for _ in range(cycles):
-            result = self.cycle(execute=execute, restrict_to_executable=restrict_to_executable)
+            result = self.cycle(
+                execute=execute,
+                restrict_to_executable=restrict_to_executable,
+                external_feedback=external_feedback,
+            )
             results.append(result)
             selected = result["selected"]
             if isinstance(selected, ActivityProposal) and selected.action_type == "stop":
@@ -352,6 +410,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         "--mode", choices=("dry-run", "dry-run-reflection", "execute"), default="dry-run",
         help="dry-run records all proposal types; dry-run-reflection restricts to executable actions; execute runs local reflections.",
     )
+    parser.add_argument(
+        "--external-feedback", action="store_true",
+        help="In execute mode, send deterministic citation/field checks from prior cycles as experimental feedback.",
+    )
     args = parser.parse_args(argv)
     settings = get_settings()
     runner = InitiativeRunner(settings)
@@ -360,6 +422,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             args.cycles,
             execute=args.mode == "execute",
             restrict_to_executable=args.mode != "dry-run",
+            external_feedback=args.external_feedback,
         )
     except ValueError as exc:
         parser.error(str(exc))
@@ -386,6 +449,11 @@ def main(argv: Sequence[str] | None = None) -> None:
                 print(f"  Unknowns: {report['unknowns']}")
                 print(f"  Proposed checks (not executed): {report['proposed_checks']}")
                 print("  Progress verified: no (reflection response only)")
+                feedback = execution.get("external_feedback")
+                if isinstance(feedback, dict):
+                    print("  External feedback generated for this cycle:")
+                    for check in feedback["checks"]:
+                        print(f"    [{check['status']}] {check['check_id']}: {check['message']}")
             else:
                 print(f"  Execution error: {execution['result']}")
         elif args.mode != "execute":

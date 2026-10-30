@@ -41,8 +41,27 @@ def test_reflection_executor_uses_bounded_context_and_records_prompt():
     assert "Earlier selected question." in llm.messages[1]["content"]
     assert "no access" in llm.messages[0]["content"]
     assert "Put only the direct answer in response" in llm.messages[0]["content"]
+    assert "Prior program-generated feedback" not in llm.messages[1]["content"]
     schema = InitiativeReflection.model_json_schema()
     assert "Direct answer only" in schema["properties"]["response"]["description"]
+
+
+def test_executor_receives_deterministic_feedback_as_structured_context():
+    llm = RecordingLLM()
+    executor = InitiativeExecutor(llm)
+    executor.execute(
+        ActivityProposal(summary="Correct the prior result citation", action_type="reflect"),
+        recent_results=[],
+        recent_selected_summaries=[],
+        recent_feedback=[{
+            "cycle_id": "previous",
+            "checks": [{"check_id": "citation_integrity", "status": "fail", "message": "Use result:previous."}],
+            "guidance": ["Use exact evidence IDs."],
+        }],
+    )
+    assert "citation_integrity" in llm.messages[1]["content"]
+    assert "Use result:previous." in llm.messages[1]["content"]
+    assert "Use exact evidence IDs." in llm.messages[1]["content"]
 
 
 def test_reflection_executor_rejects_unimplemented_action_types():
