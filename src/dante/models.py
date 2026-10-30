@@ -38,6 +38,16 @@ class ExecutableActivityProposalBatch(BaseModel):
     proposals: list[ExecutableActivityProposal] = Field(min_length=1, max_length=3)
 
 
+class InitiativeReflection(BaseModel):
+    """Structured model response; fields describe claims, not verified progress."""
+
+    response: str = Field(min_length=1, max_length=4000)
+    used_evidence_ids: list[str] = Field(default_factory=list, max_length=10)
+    inferences: list[str] = Field(default_factory=list, max_length=10)
+    unknowns: list[str] = Field(default_factory=list, max_length=10)
+    proposed_checks: list[str] = Field(default_factory=list, max_length=5)
+
+
 class AgentEvent(BaseModel):
     timestamp: datetime = Field(default_factory=utc_now)
     event_type: Literal[

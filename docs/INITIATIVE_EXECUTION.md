@@ -19,7 +19,7 @@ $env:DANTE_DB_PATH = "data/initiative-execution-v3.sqlite3"
 python -m dante.initiative --cycles 3 --mode execute
 ```
 
-Inspect each database with `python -m dante.memory_audit`. In the execution run, review `initiative_result` events and confirm each result has the same `cycle_id` as its decision. The CLI output prints completed reflection results. If Ollama is unavailable or the model is missing, the integration run cannot be considered complete; deterministic tests use a fake model and do not substitute for this check.
+Inspect each database with `python -m dante.memory_audit`. In the execution run, review `initiative_result` events and confirm each result has the same `cycle_id` as its decision. The CLI prints the structured reflection and keeps proposed checks visibly separate from executed actions. If Ollama is unavailable or the model is missing, the integration run cannot be considered complete; deterministic tests use a fake model and do not substitute for this check.
 
 The event log stores each proposal and reflection prompt, model name, temperature, seed, proposals, decisions, results, and errors. Record the Ollama version with the run notes. Compare:
 
@@ -103,28 +103,53 @@ All six databases must be new and separate from the main conversation database. 
 counts and cycle-ID links after each pair. Record model/configuration from the prompt-event
 metadata; record Ollama version, run time, and any invalid output or execution errors.
 
-### Manual scoring criteria
+### Manual scoring criteria (revised)
 
-Score each executed reflection 0 or 1 on each dimension:
+The 2026-10-30 scores below were collected before this revised rubric and are retained as
+historical diagnostic judgments; they have not been rescored. New comparisons should use the
+CSV review sheet and this revised rubric so answer quality, action execution, and verified
+progress remain separate.
 
-1. **History accuracy:** accurately represents the supplied earlier proposal/results and does
-   not claim absent context when it was present.
-2. **Evidence discipline:** distinguishes stored observations from model-generated interpretation,
-   labels inference and uncertainty, and invents no unsupported system facts.
-3. **Verifiable progress:** answers or usefully narrows the question and proposes a concrete local
-   check that could resolve an identified unknown.
-4. **Non-repetition:** does not simply repeat an earlier question, result, or failed check.
+The reflection response uses structured fields for the answer, cited prior-result IDs,
+inferences, unknowns, and proposed checks. These fields improve reviewability; they do not
+prove that the model interpreted its sources correctly. The event separately records that the
+reflection call returned, whether the reflection action ran, and that progress is unverified.
+A proposed check is never counted as an executed check. The current executor performs no
+independent local inspection, and no result can receive `progress_verified=true` without a
+separate implemented verifier and recorded verification evidence.
 
-Count a reflection as provisionally useful only with at least 3/4 points and a pass on both
-history accuracy and evidence discipline. Score an execute cycle as showing useful adaptation
-only if it accurately uses a prior outcome to choose or refine a next step whose result could be
-checked. Merely mentioning a prior result or continuing its topic is not adaptation. Review the
-corresponding dry-run pair to judge whether the executed outcome changed the next proposal in a
-relevant way. These are manual judgments, not an automated evaluator.
+Export an editable review sheet from an experiment database (opened read-only):
 
-Report per-pair cycle counts, completed/error results, exact and near-duplicate proposal pairs
-(Jaccard >= 0.5), initial-prompt match, manual scores, and any unsupported claims. A small sample
-can reveal failure modes but cannot establish general capability or a causal effect.
+```powershell
+python -m dante.initiative_eval data/initiative-experiment.sqlite3 data/initiative-review.csv
+```
+
+Score each executed reflection 0 or 1 on each manual dimension, leaving a note for every zero:
+
+1. `history_accuracy`: matches cited evidence IDs and descriptions to the supplied earlier
+   proposal/result records; does not claim supplied context was absent.
+2. `evidence_grounding`: separates recorded output from inference/unknowns and makes no factual
+   claim about system state unsupported by the records.
+3. `useful_answer`: answers or materially narrows the selected question using available evidence.
+4. `check_was_actually_run`: only score 1 when a check is independently evidenced by an
+   implemented tool/action and its result event. A proposed check or model claim alone scores 0.
+5. `non_repetition`: advances beyond repeated questions, results, or failed checks.
+
+Do not collapse these scores into one “completed” or “useful” label. Report separately: (a)
+response received, (b) reflection call/action performed, (c) manual answer quality, and (d)
+verified progress. A response may be provisionally useful when history accuracy, evidence
+grounding, and useful answer all pass and it scores at least 4/5 overall. That does not mean
+progress occurred. Claim verified progress only when an independent, reproducible check ran and
+its evidence is recorded. Evaluate adaptation separately by comparing the next proposal against
+the paired dry-run condition; accurate mention of a result or topical continuity is insufficient.
+Use the exported sheet to record one reviewer judgment per output. For higher-confidence claims,
+have a second reviewer score the same outputs independently and report disagreements; one
+reviewer remains a diagnostic assessment, not inter-rater validation.
+
+Report per-pair cycle counts, response-received/action-performed/progress-verified counts,
+completed/error results, exact and near-duplicate proposal pairs (Jaccard >= 0.5),
+initial-prompt match, manual scores, and unsupported claims. A small sample can reveal failure
+modes but cannot establish general capability or a causal effect.
 
 ### Results
 
@@ -184,3 +209,22 @@ the main database was left untouched. The feature is still a storage API and is 
 `DanteAgent.respond()`. Neither its integration nor a motivation variable should be introduced
 based on these initiative results. A later decision should follow more evaluation with a
 predefined scoring sheet, including independent review or scripted checks of known claims.
+
+## Evaluation output improvements (2026-10-30)
+
+The executor now requests a structured reflection with separate response, cited evidence IDs,
+inferences, unknowns, and proposed checks. Prior results in the executor prompt include stable
+cycle-based evidence IDs and are labeled as unverified model output. The event records the
+reflection call as received/performed, while `progress_verified` remains false and verification
+is empty. Evidence citations are retained as model claims; code records which IDs correspond to
+supplied results and which are rejected, rather than silently treating citations as facts. The
+CLI displays these fields separately.
+
+`python -m dante.initiative_eval <database> <output.csv>` creates a read-only manual review
+worksheet with the reflection, evidence validation, execution/progress facts, and blank manual
+score fields. It supports prior plain-text result events. Deterministic coverage verifies the
+structured result, invalid citation reporting, export fields, and that export leaves its source
+database unchanged. On this workstation, the live Ollama check could not run because the Ollama
+service was unreachable; therefore model adherence to the new output schema and the quality of
+new live reflections remain unverified. This implementation improves observability and review
+discipline; it does not establish useful adaptation or progress.
