@@ -21,6 +21,7 @@ from dante.models import (
 from dante.initiative_executor import InitiativeExecutor
 from dante.initiative_feedback import InitiativeFeedbackEvaluator
 from dante.initiative_inspector import EventLogInspector
+from dante.selection_policy import NoveltyPolicy, SelectionPolicy
 
 
 class InitiativeRunner:
@@ -33,6 +34,7 @@ class InitiativeRunner:
         store: EventStore | None = None,
         registry: CapabilityRegistry | None = None,
         executor: InitiativeExecutor | None = None,
+        selection_policy: SelectionPolicy | None = None,
     ) -> None:
         self.settings = settings
         self.llm = llm or OllamaLLM(settings)
@@ -42,6 +44,7 @@ class InitiativeRunner:
             self.llm, reflection_temperature=settings.reflection_temperature
         )
         self.inspector = EventLogInspector(settings.db_path)
+        self.selection_policy = selection_policy or NoveltyPolicy()
         self.feedback_evaluator = InitiativeFeedbackEvaluator()
 
     @staticmethod
@@ -307,12 +310,7 @@ class InitiativeRunner:
         selected_reason = "No candidate passed capability and executor checks."
         execution_result: dict[str, object] | None = None
         if candidates:
-            selected, _, _ = max(
-                candidates,
-                key=lambda candidate: (
-                    1.0 - candidate[2], -batch.proposals.index(candidate[0])
-                ),
-            )
+            selected, _, _ = self.selection_policy.select(candidates, batch.proposals)
             selected_reason = "Selected by the deterministic novelty baseline."
             if execute and selected.action_type == "inspect_event_log":
                 request = selected.inspection
