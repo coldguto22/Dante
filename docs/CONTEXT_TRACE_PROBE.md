@@ -29,12 +29,22 @@ Run:
 python -m dante.memory_probe
 ```
 
-No user input is needed. Ollama must be running and the model in `DANTE_MODEL` (default `llama3.2`) must be installed. The experiment creates temporary databases and runs two cases:
+No user input is needed. Ollama must be running and the model in `DANTE_MODEL` (default
+`llama3.2`) must be installed. The experiment creates temporary databases and runs four cases
+three times by default. Use `--repeats N` or `--temperature VALUE` to change the probe arm:
+
+```powershell
+python -m dante.memory_probe --repeats 5 --temperature 0
+```
 
 - **control:** the test fact remains inside the selected 12-event window;
-- **aged_out:** filler events push the same fact outside that window.
+- **aged_same_vocabulary:** filler events age the fact out, but lexical retrieval finds it;
+- **aged_paraphrase:** the fact is aged out and the question has no normalized token overlap;
+- **absent:** the fact was never stored.
 
-The test fact is synthetic (`VIOLETA-7319`), and the normal Dante database is not used. The report distinguishes whether the fact was actually included in the model context from whether the model repeated it in its answer. The latter is model-dependent and may vary between runs; the former should be deterministic.
+The test fact is synthetic (`VIOLETA-7319`), and the normal Dante database is not used. The
+report separates `fact_in_window`, `fact_retrieved`, and `fact_in_context`, plus model-dependent
+answer rates. The exit code depends only on the deterministic trace expectations, never on answer quality.
 
 The experiment does not prove long-term learning or consciousness. It measures one specific property of the current retrieval policy and the configured model's response to the supplied context.
 
@@ -46,3 +56,9 @@ python -m pytest
 ```
 
 Unit tests use a recording fake model, so they do not require Ollama. They verify that tracing is opt-in, metadata-only, records event IDs and message ordering, and identifies event types filtered out of the context.
+
+## Measurement correction (2026-11-05)
+
+The 2026-10-30 `aged_out: fact_in_llm_context=false` result was a measurement artifact:
+the fact was outside the chronological window but was present in the trace's retrieved-memory
+records. The corrected probe reports that as `fact_in_context=true`.

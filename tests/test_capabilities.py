@@ -15,6 +15,7 @@ def test_known_internal_proposal_is_authorized_for_dry_run_only():
     registry = CapabilityRegistry()
     proposal = ActivityProposal(
         summary="Review a recent unresolved question",
+        rationale="It examines the question.",
         action_type="reflect",
     )
 
@@ -28,6 +29,7 @@ def test_external_action_request_is_rejected_even_if_action_type_looks_internal(
     registry = CapabilityRegistry()
     proposal = ActivityProposal(
         summary="Search the web for current information",
+        rationale="It would gather information.",
         action_type="research_question",
         requires_external_action=True,
     )
@@ -40,7 +42,7 @@ def test_external_action_request_is_rejected_even_if_action_type_looks_internal(
 
 def test_registry_alone_does_not_authorize_execution():
     registry = CapabilityRegistry()
-    proposal = ActivityProposal(summary="Reflect", action_type="reflect")
+    proposal = ActivityProposal(summary="Reflect", rationale="It performs reflection.", action_type="reflect")
 
     decision = registry.authorize_proposal(proposal, dry_run=False)
 

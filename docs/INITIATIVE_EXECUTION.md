@@ -1,5 +1,13 @@
 # Bounded initiative execution experiment
 
+## Proposal schema note (2026-11-05)
+
+`ActivityProposal` and `ExecutableActivityProposal` now require a non-empty,
+context-grounded `rationale`. Older event records with an empty rationale remain
+readable because stored proposals are not revalidated on read; experiments made
+before this change are therefore not directly comparable on proposal-validation
+failure rates.
+
 ## What execute mode does
 
 `python -m dante.initiative --mode execute` can execute only a selected `reflect` proposal. It sends the proposal, up to five recent selected summaries, and up to three recent execution outcomes to the configured local Ollama model. The result or error is stored as an `initiative_result` event linked to the cycle ID. Later cycles receive those results as historical model output, not as verified facts or instructions.
@@ -39,6 +47,26 @@ the next cycle by this feature.
 
 The review-sheet exporter includes both feedback generated for each result and the prior
 feedback text present in that cycle's reflection prompt.
+
+## Diagnostic distilled history arm
+
+Execute mode accepts `--history-mode distilled` as an opt-in diagnostic comparison:
+
+```powershell
+python -m dante.initiative --cycles 3 --mode execute --history-mode distilled
+```
+
+The default is `raw`. The distilled arm removes prior model-authored result text from both
+proposal and reflection prompts and supplies only code-owned evidence IDs, cycle/action/status
+fields, selected summaries, deterministic evidence-validation counts, progress flags, and an
+authoritative count block. It is intended to isolate the echo effect, not to replace outcome
+content needed for future adaptation. The mode is rejected outside execute mode and is recorded
+in every initiative prompt event.
+
+The deterministic feedback evaluator also reports a heuristic `false_absence_claim` check. It
+flags English claims that supplied results/outcomes or selected summaries are empty when the
+stored reflection prompt contained such context. This is an auditable structural signal, not a
+semantic truth check; paraphrases may be missed and unusual wording may be flagged.
 
 ### Live feedback smoke test (2026-10-30)
 

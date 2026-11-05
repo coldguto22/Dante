@@ -47,8 +47,8 @@ class FakeExecutor:
 
 def test_cycle_records_candidates_and_selected_decision_without_execution(tmp_path):
     batch = ActivityProposalBatch(proposals=[
-        ActivityProposal(summary="Review an unresolved question about memory", action_type="reflect"),
-        ActivityProposal(summary="Formulate a test for retrieval relevance", action_type="research_question"),
+        ActivityProposal(summary="Review an unresolved question about memory", rationale="It examines memory.", action_type="reflect"),
+        ActivityProposal(summary="Formulate a test for retrieval relevance", rationale="It tests retrieval.", action_type="research_question"),
     ])
     store = EventStore(tmp_path / "initiative.sqlite3")
     runner = InitiativeRunner(
@@ -76,6 +76,7 @@ def test_cycle_rejects_candidates_that_request_external_actions(tmp_path):
     batch = ActivityProposalBatch(proposals=[
         ActivityProposal(
             summary="Search the web for recent papers",
+            rationale="It would investigate the topic.",
             action_type="research_question",
             requires_external_action=True,
         ),
@@ -97,7 +98,7 @@ def test_cycle_rejects_candidates_that_request_external_actions(tmp_path):
 
 def test_run_bounds_cycles_and_stops_when_stop_proposal_selected(tmp_path):
     batch = ActivityProposalBatch(proposals=[
-        ActivityProposal(summary="Stop this experiment cycle", action_type="stop"),
+        ActivityProposal(summary="Stop this experiment cycle", rationale="It ends the bounded run.", action_type="stop"),
     ])
     runner = InitiativeRunner(
         Settings(db_path=tmp_path / "initiative.sqlite3"),
@@ -111,7 +112,7 @@ def test_run_bounds_cycles_and_stops_when_stop_proposal_selected(tmp_path):
 
 
 def test_execute_mode_stop_proposal_ends_without_running_reflection(tmp_path):
-    proposal = ActivityProposal(summary="Stop this initiative", action_type="stop")
+    proposal = ActivityProposal(summary="Stop this initiative", rationale="It ends the run.", action_type="stop")
     store = EventStore(tmp_path / "initiative.sqlite3")
     executor = FakeExecutor()
     runner = InitiativeRunner(
@@ -130,7 +131,7 @@ def test_execute_mode_stop_proposal_ends_without_running_reflection(tmp_path):
 
 
 def test_execute_mode_runs_only_reflection_and_records_result(tmp_path):
-    proposal = ActivityProposal(summary="Review the unresolved memory question", action_type="reflect")
+    proposal = ActivityProposal(summary="Review the unresolved memory question", rationale="It examines memory.", action_type="reflect")
     llm = FakeStructuredLLM(ActivityProposalBatch(proposals=[proposal]))
     store = EventStore(tmp_path / "initiative.sqlite3")
     executor = FakeExecutor("Observed limitation: retrieval is lexical.")
@@ -161,7 +162,7 @@ def test_execute_mode_runs_only_reflection_and_records_result(tmp_path):
 
 
 def test_reflection_only_dry_run_uses_execution_schema_without_executing(tmp_path):
-    proposal = ActivityProposal(summary="Reflect on the bounded experiment", action_type="reflect")
+    proposal = ActivityProposal(summary="Reflect on the bounded experiment", rationale="It examines the experiment.", action_type="reflect")
     store = EventStore(tmp_path / "initiative.sqlite3")
     executor = FakeExecutor()
     llm = FakeStructuredLLM(ActivityProposalBatch(proposals=[proposal]))
@@ -179,7 +180,7 @@ def test_reflection_only_dry_run_uses_execution_schema_without_executing(tmp_pat
 
 
 def test_execute_mode_records_executor_errors_without_aborting_cycle(tmp_path):
-    proposal = ActivityProposal(summary="Reflect on retrieval quality", action_type="reflect")
+    proposal = ActivityProposal(summary="Reflect on retrieval quality", rationale="It checks retrieval.", action_type="reflect")
     store = EventStore(tmp_path / "initiative.sqlite3")
     runner = InitiativeRunner(
         Settings(db_path=tmp_path / "initiative.sqlite3"),
@@ -200,7 +201,7 @@ def test_execution_records_invalid_model_evidence_ids_separately(tmp_path):
         def execute(self, proposal, *, recent_results, recent_selected_summaries, recent_feedback=None, on_prompt=None):
             return InitiativeReflection(response="Claim", used_evidence_ids=["result:invented"])
 
-    proposal = ActivityProposal(summary="Review context", action_type="reflect")
+    proposal = ActivityProposal(summary="Review context", rationale="It reviews context.", action_type="reflect")
     runner = InitiativeRunner(
         Settings(db_path=tmp_path / "initiative.sqlite3"),
         llm=FakeStructuredLLM(ActivityProposalBatch(proposals=[proposal])),
@@ -214,7 +215,7 @@ def test_execution_records_invalid_model_evidence_ids_separately(tmp_path):
 
 
 def test_execute_mode_does_not_run_actions_without_an_executor(tmp_path):
-    proposal = ActivityProposal(summary="Formulate a research question", action_type="research_question")
+    proposal = ActivityProposal(summary="Formulate a research question", rationale="It frames a test.", action_type="research_question")
     store = EventStore(tmp_path / "initiative.sqlite3")
     runner = InitiativeRunner(
         Settings(db_path=tmp_path / "initiative.sqlite3"),
@@ -230,8 +231,8 @@ def test_execute_mode_does_not_run_actions_without_an_executor(tmp_path):
 
 
 def test_previous_execution_results_are_supplied_to_later_proposals(tmp_path):
-    first = ActivityProposal(summary="Inspect memory retrieval limits", action_type="reflect")
-    second = ActivityProposal(summary="Assess the unresolved retrieval issue", action_type="reflect")
+    first = ActivityProposal(summary="Inspect memory retrieval limits", rationale="It inspects limits.", action_type="reflect")
+    second = ActivityProposal(summary="Assess the unresolved retrieval issue", rationale="It assesses the issue.", action_type="reflect")
     llm = FakeStructuredLLM([
         ActivityProposalBatch(proposals=[first]),
         ActivityProposalBatch(proposals=[second]),
@@ -250,8 +251,8 @@ def test_previous_execution_results_are_supplied_to_later_proposals(tmp_path):
 
 
 def test_duplicate_candidates_in_same_batch_are_rejected(tmp_path):
-    duplicate = ActivityProposal(summary="Review the memory retrieval limitations", action_type="reflect")
-    distinct = ActivityProposal(summary="Check whether outcomes influence later selections", action_type="reflect")
+    duplicate = ActivityProposal(summary="Review the memory retrieval limitations", rationale="It revisits limits.", action_type="reflect")
+    distinct = ActivityProposal(summary="Check whether outcomes influence later selections", rationale="It tests influence.", action_type="reflect")
     store = EventStore(tmp_path / "initiative.sqlite3")
     store.add(AgentEvent(
         event_type="initiative_decision",
@@ -273,8 +274,8 @@ def test_duplicate_candidates_in_same_batch_are_rejected(tmp_path):
 
 
 def test_reflection_only_mode_rejects_candidates_matching_recent_selections(tmp_path):
-    repeated = ActivityProposal(summary="Review the same retrieval question", action_type="reflect")
-    distinct = ActivityProposal(summary="Measure outcome use in the next cycle", action_type="reflect")
+    repeated = ActivityProposal(summary="Review the same retrieval question", rationale="It repeats the question.", action_type="reflect")
+    distinct = ActivityProposal(summary="Measure outcome use in the next cycle", rationale="It measures outcome use.", action_type="reflect")
     store = EventStore(tmp_path / "initiative.sqlite3")
     store.add(AgentEvent(
         event_type="initiative_decision",
@@ -295,8 +296,58 @@ def test_reflection_only_mode_rejects_candidates_matching_recent_selections(tmp_
     assert "recent selected" in proposal_events[0].metadata["reason"]
 
 
+def test_distilled_history_hides_model_text_and_records_state_facts(tmp_path):
+    class DistilledExecutor(FakeExecutor):
+        def execute(
+            self, proposal, *, recent_results, recent_selected_summaries,
+            recent_feedback=None, history_mode="raw", state_facts=None, on_prompt=None,
+        ):
+            self.distilled_prompt = (history_mode, state_facts, recent_results)
+            if on_prompt:
+                on_prompt([{"role": "user", "content": proposal.summary}])
+            return InitiativeReflection(response="bounded result")
+
+    proposal = ActivityProposal(
+        summary="Review the prior result",
+        rationale="It checks continuity.",
+        action_type="reflect",
+    )
+    proposal2 = ActivityProposal(
+        summary="Measure the next bounded outcome",
+        rationale="It compares the next cycle.",
+        action_type="reflect",
+    )
+    llm = FakeStructuredLLM([
+        ActivityProposalBatch(proposals=[proposal]),
+        ActivityProposalBatch(proposals=[proposal2]),
+    ])
+    store = EventStore(tmp_path / "distilled.sqlite3")
+    executor = DistilledExecutor("UNIQUE-SENTINEL")
+    runner = InitiativeRunner(
+        Settings(db_path=tmp_path / "distilled.sqlite3"),
+        llm=llm,
+        store=store,
+        executor=executor,
+    )
+    runner.cycle(execute=True, history_mode="raw")
+    runner.cycle(execute=True, history_mode="distilled")
+
+    proposal_prompt = llm.calls[1][0][0]["content"]
+    assert "UNIQUE-SENTINEL" not in proposal_prompt
+    assert executor.distilled_prompt[0] == "distilled"
+    assert executor.distilled_prompt[1]["prior_results"] == 1
+    assert executor.distilled_prompt[1]["prior_selected_summaries"] == 1
+    assert "UNIQUE-SENTINEL" not in json.dumps(executor.distilled_prompt[2])
+    prompt_events = [
+        event for event in store.recent(limit=100)
+        if event.event_type == "initiative_prompt"
+    ]
+    assert all(event.metadata["history_mode"] == "raw" for event in prompt_events[:2])
+    assert all(event.metadata["history_mode"] == "distilled" for event in prompt_events[2:])
+
+
 def test_execution_proposal_schema_excludes_unsupported_actions():
     with pytest.raises(ValueError):
         ExecutableActivityProposalBatch(proposals=[
-            ExecutableActivityProposal(summary="Respond to a user", action_type="respond")
+            ExecutableActivityProposal(summary="Respond to a user", rationale="It answers the user.", action_type="respond")
         ])

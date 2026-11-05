@@ -50,7 +50,7 @@ def test_executor_receives_deterministic_feedback_as_structured_context():
     llm = RecordingLLM()
     executor = InitiativeExecutor(llm)
     executor.execute(
-        ActivityProposal(summary="Correct the prior result citation", action_type="reflect"),
+        ActivityProposal(summary="Correct the prior result citation", rationale="It addresses the citation.", action_type="reflect"),
         recent_results=[],
         recent_selected_summaries=[],
         recent_feedback=[{
@@ -66,7 +66,7 @@ def test_executor_receives_deterministic_feedback_as_structured_context():
 
 def test_reflection_executor_rejects_unimplemented_action_types():
     executor = InitiativeExecutor(RecordingLLM())
-    proposal = ActivityProposal(summary="Search the web", action_type="research_question")
+    proposal = ActivityProposal(summary="Search the web", rationale="It tests the question.", action_type="research_question")
 
     with pytest.raises(ValueError, match="No executor"):
         executor.execute(
@@ -84,7 +84,7 @@ def test_reflection_executor_preserves_evidence_claims_for_audit():
 
     executor = InitiativeExecutor(ReferencingLLM())
     report = executor.execute(
-        ActivityProposal(summary="Review the earlier outcome", action_type="reflect"),
+        ActivityProposal(summary="Review the earlier outcome", rationale="It checks the outcome.", action_type="reflect"),
         recent_results=[{"evidence_id": "result:real", "result": "Observed output"}],
         recent_selected_summaries=[],
     )

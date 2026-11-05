@@ -27,7 +27,9 @@ def test_chat_passes_configured_temperature_and_seed():
 
 
 def test_structured_passes_configured_options():
-    client = FakeOllamaClient('{"summary":"wait","action_type":"stop"}')
+    client = FakeOllamaClient(
+        '{"summary":"wait","rationale":"It ends the cycle.","action_type":"stop"}'
+    )
     llm = OllamaLLM(Settings(temperature=0.4, seed=7), client=client)
 
     result = llm.structured(

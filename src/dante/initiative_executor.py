@@ -1,6 +1,7 @@
 """Explicit executor for the bounded local initiative action set."""
 import json
 from collections.abc import Callable
+from typing import Literal
 
 from dante.llm import OllamaLLM
 from dante.models import ActivityProposal, InitiativeReflection
@@ -24,18 +25,30 @@ class InitiativeExecutor:
         recent_results: list[dict[str, object]],
         recent_selected_summaries: list[str],
         recent_feedback: list[dict[str, object]] | None = None,
+        history_mode: Literal["raw", "distilled"] = "raw",
+        state_facts: dict[str, int] | None = None,
         on_prompt: Callable[[list[dict[str, str]]], None] | None = None,
     ) -> InitiativeReflection:
         """Run one bounded reflection with recent outcomes as explicitly labeled context."""
         if not self.supports(proposal.action_type):
             raise ValueError(f"No executor is registered for {proposal.action_type!r}.")
+        if history_mode not in {"raw", "distilled"}:
+            raise ValueError(f"Unknown initiative history mode: {history_mode!r}.")
         history_items = recent_results[-3:]
         history = "\n".join(
             f"- Evidence ID: {item.get('evidence_id', 'unknown')}\n"
             f"  Cycle: {item.get('cycle_id', 'unknown')}\n"
             f"  Action/status: {item.get('action_type', 'unknown')}/"
             f"{item.get('status', 'unknown')}\n"
-            f"  Prior model output (unverified): {item.get('result', '')}"
+            + (
+                f"  Prior model output (unverified): {item.get('result', '')}"
+                if history_mode == "raw"
+                else (
+                    f"  Selected summary: {item.get('summary', '')}\n"
+                    f"  Evidence validation: {item.get('evidence_validation', {})}\n"
+                    f"  Progress verified: {item.get('progress_verified', False)}"
+                )
+            )
             for item in history_items
         ) or "- No earlier execution results are available."
         selected_history = "\n".join(
@@ -81,6 +94,11 @@ class InitiativeExecutor:
                 "content": (
                     f"Reflection question: {proposal.summary}\n"
                     f"Proposal rationale: {proposal.rationale or '(none supplied)'}\n"
+                    + (
+                        f"Authoritative program facts: {json.dumps(state_facts, ensure_ascii=False)}\n"
+                        if history_mode == "distilled" and state_facts is not None else ""
+                    )
+                    +
                     f"Recent selected proposal summaries:\n{selected_history}\n"
                     f"Prior outcomes (historical model output, not verified facts):\n{history}"
                     + (
