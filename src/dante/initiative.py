@@ -38,7 +38,9 @@ class InitiativeRunner:
         self.llm = llm or OllamaLLM(settings)
         self.store = store or EventStore(settings.db_path)
         self.registry = registry or CapabilityRegistry()
-        self.executor = executor or InitiativeExecutor(self.llm)
+        self.executor = executor or InitiativeExecutor(
+            self.llm, reflection_temperature=settings.reflection_temperature
+        )
         self.inspector = EventLogInspector(settings.db_path)
         self.feedback_evaluator = InitiativeFeedbackEvaluator()
 
@@ -220,7 +222,7 @@ class InitiativeRunner:
             {"role": "system", "content": prompt},
             {"role": "user", "content": "Propose the next bounded initiative candidates."},
         ]
-        self.store.add(AgentEvent(
+        proposal_prompt_event_id = self.store.add(AgentEvent(
             event_type="initiative_prompt",
             content=json.dumps(proposal_messages, ensure_ascii=False),
             metadata={
@@ -239,6 +241,10 @@ class InitiativeRunner:
         ))
         try:
             generated = self.llm.structured(proposal_messages, proposal_schema)
+            if getattr(self.llm, "last_telemetry", None):
+                self.store.update_metadata(
+                    proposal_prompt_event_id, self.llm.last_telemetry
+                )
         except Exception as exc:
             self.store.add(AgentEvent(
                 event_type="error",
@@ -364,8 +370,11 @@ class InitiativeRunner:
                     }
             elif execute and selected.action_type == "reflect":
                 try:
+                    reflection_prompt_event_id: int | None = None
+
                     def record_action_prompt(messages: list[dict[str, str]]) -> None:
-                        self.store.add(AgentEvent(
+                        nonlocal reflection_prompt_event_id
+                        reflection_prompt_event_id = self.store.add(AgentEvent(
                             event_type="initiative_prompt",
                             content=json.dumps(messages, ensure_ascii=False),
                             metadata={
@@ -393,6 +402,12 @@ class InitiativeRunner:
                             "state_facts": state_facts,
                         })
                     reflection = self.executor.execute(selected, **executor_kwargs)
+                    if reflection_prompt_event_id is not None and getattr(
+                        self.llm, "last_telemetry", None
+                    ):
+                        self.store.update_metadata(
+                            reflection_prompt_event_id, self.llm.last_telemetry
+                        )
                     execution_result = {
                         "cycle_id": cycle_id,
                         "action_type": selected.action_type,

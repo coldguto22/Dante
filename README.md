@@ -71,13 +71,13 @@ python -m dante.initiative --cycles 3 --mode execute
 
 Use a separate database path for experiments so initiative events do not mix with the conversation history. The experiment still requires Ollama and the configured local model.
 
-The initiative cycle uses the configured Ollama model and the `DANTE_DB_PATH` SQLite database. It records prompts/configuration as `initiative_prompt` events, candidates as `proposal` events, and the selection as an `initiative_decision` event. Execute mode additionally records `initiative_result` events for local reflections, including errors, and supplies recent results to subsequent proposals and reflections. To inspect recent records, use `python -m dante.memory_audit`.
+The initiative cycle uses the configured Ollama model and the `DANTE_DB_PATH` SQLite database. It records prompts/configuration as `initiative_prompt` events, candidates as `proposal` events, and the selection as an `initiative_decision` event. Execute mode records `initiative_result` events for local reflections and can run bounded, read-only event-log inspections, including errors, without exposing SQL or external actions. It supplies recorded outcomes to subsequent proposals and reflections. To inspect recent records, use `python -m dante.memory_audit`.
 
-Configuration is environment-based. Existing settings include `OLLAMA_HOST`, `DANTE_MODEL`, `DANTE_DB_PATH`, `DANTE_TEMPERATURE`, and optional `DANTE_SEED`. Ollama must be running and the configured model must be installed.
+Configuration is environment-based. Existing settings include `OLLAMA_HOST`, `DANTE_MODEL`, `DANTE_DB_PATH`, `DANTE_TEMPERATURE`, optional `DANTE_SEED`, `DANTE_NUM_CTX`, and `DANTE_REFLECTION_TEMPERATURE`. Ollama must be running and the configured model must be installed.
 
 ## Safety and evaluation scope
 
-The registry is defined in code, not by the model. A proposal being authorized means it may be recorded and considered for selection; it does not itself mean the action was performed. Execute mode supports only local `reflect` actions through the configured model. Other action types are not executed; web, arbitrary file access, shell commands, and external services remain unavailable to the initiative loop.
+The registry is defined in code, not by the model. A proposal being authorized means it may be recorded and considered for selection; it does not itself mean the action was performed. Execute mode supports local `reflect` actions through the configured model and fixed read-only event-log inspection. Other action types are not executed; web, arbitrary file access, shell commands, SQL written by the model, and external services remain unavailable to the initiative loop.
 
 The novelty policy is only an initial measurable baseline. It can favor novelty over usefulness, and lexical similarity is imperfect. Tests cover schema/registry authorization, rejection of external-action requests, bounded cycles, and event recording. Passing these tests would establish software behavior, not consciousness or general autonomy.
 

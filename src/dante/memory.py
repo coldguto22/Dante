@@ -86,6 +86,21 @@ class EventStore:
             )
             return int(cursor.lastrowid)
 
+    def update_metadata(self, event_id: int, updates: dict[str, object]) -> None:
+        """Merge code-owned metadata into an existing event."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT metadata_json FROM events WHERE id = ?", (event_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"Event {event_id} does not exist.")
+            metadata = json.loads(row[0])
+            metadata.update(updates)
+            conn.execute(
+                "UPDATE events SET metadata_json = ? WHERE id = ?",
+                (json.dumps(metadata, ensure_ascii=False), event_id),
+            )
+
     def add_user_memory(self, source_event_id: int, content: str) -> UserMemoryRecord:
         """Save an exact excerpt of a user message with its event provenance.
 

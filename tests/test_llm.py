@@ -41,6 +41,23 @@ def test_structured_passes_configured_options():
     assert client.calls[0]["options"] == {"temperature": 0.4, "seed": 7}
 
 
+def test_structured_uses_context_and_reflection_temperature_and_records_telemetry():
+    client = FakeOllamaClient(
+        '{"summary":"wait","rationale":"It ends the cycle.","action_type":"stop"}'
+    )
+    settings = Settings(
+        temperature=0.8, reflection_temperature=0.25, num_ctx=4096, seed=7
+    )
+    llm = OllamaLLM(settings, client=client)
+
+    llm.structured([{"role": "user", "content": "propose"}], ActivityProposal)
+
+    assert client.calls[0]["options"] == {
+        "temperature": 0.25, "seed": 7, "num_ctx": 4096
+    }
+    assert llm.last_telemetry["telemetry_status"] == "unavailable"
+
+
 def test_temperature_must_be_in_supported_range():
     with pytest.raises(ValidationError):
         Settings(temperature=2.5)

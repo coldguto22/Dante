@@ -12,8 +12,9 @@ class InitiativeExecutor:
 
     EXECUTABLE_ACTIONS = frozenset({"reflect", "inspect_event_log"})
 
-    def __init__(self, llm: OllamaLLM) -> None:
+    def __init__(self, llm: OllamaLLM, reflection_temperature: float | None = None) -> None:
         self.llm = llm
+        self.reflection_temperature = reflection_temperature
 
     def supports(self, action_type: str) -> bool:
         return action_type in self.EXECUTABLE_ACTIONS
@@ -113,6 +114,13 @@ class InitiativeExecutor:
         ]
         if on_prompt is not None:
             on_prompt(messages)
-        result = self.llm.structured(messages, InitiativeReflection)
+        previous_temperature = getattr(self.llm, "reflection_temperature", None)
+        if hasattr(self.llm, "reflection_temperature"):
+            self.llm.reflection_temperature = self.reflection_temperature
+        try:
+            result = self.llm.structured(messages, InitiativeReflection)
+        finally:
+            if hasattr(self.llm, "reflection_temperature"):
+                self.llm.reflection_temperature = previous_temperature
         report = InitiativeReflection.model_validate(result.model_dump())
         return report

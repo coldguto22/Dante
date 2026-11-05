@@ -116,6 +116,13 @@ Inspect each database with `python -m dante.memory_audit`. In the execution run,
 
 The event log stores each proposal and reflection prompt, model name, temperature, seed, proposals, decisions, results, and errors. Record the Ollama version with the run notes. Compare:
 
+When Ollama exposes them, initiative prompt metadata also records
+`prompt_eval_count` and `eval_count`. `DANTE_NUM_CTX` is optional and is passed
+as the Ollama `num_ctx` option. `DANTE_REFLECTION_TEMPERATURE` is optional and
+changes only reflection structured calls; proposal generation keeps
+`DANTE_TEMPERATURE`. Missing client telemetry is recorded explicitly as
+unavailable rather than inferred.
+
 - exact and lexical near-duplicate proposals;
 - actions completed and execution errors;
 - whether the next cycle's proposal prompt contains the prior result;

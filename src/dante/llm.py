@@ -13,11 +13,13 @@ class OllamaLLM:
     def __init__(self, settings: Settings, client: Client | None = None) -> None:
         self.model = settings.model
         self.client = client or Client(host=settings.ollama_host)
-        self.options: dict[str, int | float] = {
-            "temperature": settings.temperature,
-        }
+        self.options: dict[str, int | float] = {"temperature": settings.temperature}
         if settings.seed is not None:
             self.options["seed"] = settings.seed
+        if settings.num_ctx is not None:
+            self.options["num_ctx"] = settings.num_ctx
+        self.reflection_temperature = settings.reflection_temperature
+        self.last_telemetry: dict[str, int | str | None] = {}
 
     def chat(self, messages: list[dict[str, str]]) -> str:
         try:
@@ -38,12 +40,24 @@ class OllamaLLM:
 
     def structured(self, messages: list[dict[str, str]], schema: type[BaseModel]) -> BaseModel:
         try:
+            options = dict(self.options)
+            if self.reflection_temperature is not None:
+                options["temperature"] = self.reflection_temperature
             response = self.client.chat(
                 model=self.model,
                 messages=messages,
                 format=schema.model_json_schema(),
-                options=self.options,
+                options=options,
             )
+            self.last_telemetry = {
+                "prompt_eval_count": getattr(response, "prompt_eval_count", None),
+                "eval_count": getattr(response, "eval_count", None),
+                "telemetry_status": (
+                    "available"
+                    if hasattr(response, "prompt_eval_count") and hasattr(response, "eval_count")
+                    else "unavailable"
+                ),
+            }
             content = response.message.content
             if not content:
                 raise LLMError("The local model returned an empty structured response.")
