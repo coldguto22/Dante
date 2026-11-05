@@ -9,6 +9,7 @@ def test_registry_lists_available_planned_restricted_and_unavailable_capabilitie
     assert {"available", "planned", "restricted", "unavailable"} <= statuses
     assert registry.get("web_research").status == "planned"
     assert registry.get("shell_execution").status == "unavailable"
+    assert registry.get("inspect_event_log").external_effects is False
 
 
 def test_known_internal_proposal_is_authorized_for_dry_run_only():
@@ -48,3 +49,13 @@ def test_registry_alone_does_not_authorize_execution():
 
     assert decision.allowed is False
     assert "cannot authorize execution" in decision.reason
+
+
+def test_read_only_inspection_is_a_registered_internal_action():
+    proposal = ActivityProposal(
+        summary="Inspect the event log",
+        rationale="It checks recorded outcomes.",
+        action_type="inspect_event_log",
+    )
+    decision = CapabilityRegistry().authorize_proposal(proposal, dry_run=True)
+    assert decision.allowed is True

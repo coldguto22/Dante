@@ -20,6 +20,7 @@ from dante.models import (
 )
 from dante.initiative_executor import InitiativeExecutor
 from dante.initiative_feedback import InitiativeFeedbackEvaluator
+from dante.initiative_inspector import EventLogInspector
 
 
 class InitiativeRunner:
@@ -38,6 +39,7 @@ class InitiativeRunner:
         self.store = store or EventStore(settings.db_path)
         self.registry = registry or CapabilityRegistry()
         self.executor = executor or InitiativeExecutor(self.llm)
+        self.inspector = EventLogInspector(settings.db_path)
         self.feedback_evaluator = InitiativeFeedbackEvaluator()
 
     @staticmethod
@@ -184,7 +186,7 @@ class InitiativeRunner:
             "You are generating candidate activities for Dante's bounded local initiative experiment. "
             "Return 1 to 3 distinct, small proposals in the required schema. "
             + (
-                "Only propose an internal reflection or stop. "
+                "Only propose an internal reflection, a fixed read-only event-log inspection, or stop. "
                 if restrict_to_executable
                 else "Only propose internal reflection, formulating a question, a conversational response, or stopping this cycle. "
             )
@@ -306,7 +308,61 @@ class InitiativeRunner:
                 ),
             )
             selected_reason = "Selected by the deterministic novelty baseline."
-            if execute and selected.action_type == "reflect":
+            if execute and selected.action_type == "inspect_event_log":
+                request = selected.inspection
+                try:
+                    if request is None:
+                        raise ValueError("inspect_event_log requires a validated inspection request.")
+                    self.store.add(AgentEvent(
+                        event_type="initiative_check",
+                        content=json.dumps({
+                            "cycle_id": cycle_id,
+                            "request": request.model_dump(mode="json"),
+                        }, ensure_ascii=False),
+                        metadata={"cycle_id": cycle_id, "query": request.query},
+                    ))
+                    inspection = self.inspector.inspect(request)
+                    self.store.add(AgentEvent(
+                        event_type="initiative_check_result",
+                        content=json.dumps({
+                            "cycle_id": cycle_id,
+                            "status": "completed",
+                            "query": request.query,
+                            "result": inspection,
+                        }, ensure_ascii=False),
+                        metadata={"cycle_id": cycle_id, "status": "completed"},
+                    ))
+                    execution_result = {
+                        "cycle_id": cycle_id,
+                        "action_type": selected.action_type,
+                        "summary": selected.summary,
+                        "status": "completed",
+                        "action_performed": True,
+                        "check_was_actually_run": True,
+                        "progress_verified": False,
+                        "result": inspection,
+                    }
+                except Exception as exc:
+                    self.store.add(AgentEvent(
+                        event_type="initiative_check_result",
+                        content=json.dumps({
+                            "cycle_id": cycle_id,
+                            "status": "error",
+                            "result": f"{type(exc).__name__}: {exc}"[:2000],
+                        }, ensure_ascii=False),
+                        metadata={"cycle_id": cycle_id, "status": "error"},
+                    ))
+                    execution_result = {
+                        "cycle_id": cycle_id,
+                        "action_type": selected.action_type,
+                        "summary": selected.summary,
+                        "status": "error",
+                        "action_performed": False,
+                        "check_was_actually_run": False,
+                        "progress_verified": False,
+                        "result": f"{type(exc).__name__}: {exc}"[:2000],
+                    }
+            elif execute and selected.action_type == "reflect":
                 try:
                     def record_action_prompt(messages: list[dict[str, str]]) -> None:
                         self.store.add(AgentEvent(

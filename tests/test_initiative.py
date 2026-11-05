@@ -12,6 +12,7 @@ from dante.models import (
     ExecutableActivityProposal,
     ExecutableActivityProposalBatch,
     InitiativeReflection,
+    EventLogInspectionRequest,
 )
 
 
@@ -159,6 +160,32 @@ def test_execute_mode_runs_only_reflection_and_records_result(tmp_path):
         "proposal_generation", "reflection_execution"
     }
     assert all(event.metadata["model"] == "llama3.2" for event in prompts)
+
+
+def test_execute_mode_runs_read_only_event_log_check_and_keeps_progress_unverified(tmp_path):
+    proposal = ActivityProposal(
+        summary="Inspect recorded event counts",
+        rationale="It checks what the experiment has recorded.",
+        action_type="inspect_event_log",
+        inspection=EventLogInspectionRequest(query="event_counts"),
+    )
+    database = tmp_path / "initiative-experiment.sqlite3"
+    store = EventStore(database)
+    runner = InitiativeRunner(
+        Settings(db_path=database),
+        llm=FakeStructuredLLM(ActivityProposalBatch(proposals=[proposal])),
+        store=store,
+    )
+
+    result = runner.cycle(execute=True)
+
+    assert result["execution"]["status"] == "completed"
+    assert result["execution"]["check_was_actually_run"] is True
+    assert result["execution"]["progress_verified"] is False
+    events = store.recent(limit=20)
+    assert any(event.event_type == "initiative_check" for event in events)
+    check_result = next(event for event in events if event.event_type == "initiative_check_result")
+    assert json.loads(check_result.content)["status"] == "completed"
 
 
 def test_reflection_only_dry_run_uses_execution_schema_without_executing(tmp_path):

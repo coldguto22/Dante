@@ -10,7 +10,7 @@ from dante.models import ActivityProposal, InitiativeReflection
 class InitiativeExecutor:
     """Execute only local reflection; all other initiative actions remain proposals."""
 
-    EXECUTABLE_ACTIONS = frozenset({"reflect"})
+    EXECUTABLE_ACTIONS = frozenset({"reflect", "inspect_event_log"})
 
     def __init__(self, llm: OllamaLLM) -> None:
         self.llm = llm
@@ -32,6 +32,8 @@ class InitiativeExecutor:
         """Run one bounded reflection with recent outcomes as explicitly labeled context."""
         if not self.supports(proposal.action_type):
             raise ValueError(f"No executor is registered for {proposal.action_type!r}.")
+        if proposal.action_type == "inspect_event_log":
+            raise ValueError("Event-log inspection is executed by the code-owned inspector.")
         if history_mode not in {"raw", "distilled"}:
             raise ValueError(f"Unknown initiative history mode: {history_mode!r}.")
         history_items = recent_results[-3:]

@@ -54,6 +54,13 @@ class CapabilityRegistry:
                 notes="Formulating a question is not the same as searching the web or verifying facts.",
             ),
             Capability(
+                name="inspect_event_log",
+                description="Run one fixed, read-only query over the bounded initiative experiment log.",
+                status="available",
+                supported_action_types=("inspect_event_log",),
+                external_effects=False,
+            ),
+            Capability(
                 name="stop_cycle",
                 description="End the current initiative loop without performing an action.",
                 status="available",

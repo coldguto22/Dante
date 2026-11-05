@@ -68,6 +68,17 @@ flags English claims that supplied results/outcomes or selected summaries are em
 stored reflection prompt contained such context. This is an auditable structural signal, not a
 semantic truth check; paraphrases may be missed and unusual wording may be flagged.
 
+## Read-only event-log inspection (item 5)
+
+Execute mode can also select `inspect_event_log`, which runs one code-owned query against the
+configured experiment database. The available queries are event counts, bounded recent results,
+an exact cycle-result lookup, and bounded recent decisions. The model supplies a validated query
+request, never SQL. The database is opened with SQLite `mode=ro`; the main `dante.sqlite3`
+conversation database is rejected. Successful checks create `initiative_check` and
+`initiative_check_result` events and are exported with `check_was_actually_run=True`.
+Inspection is observation only: `progress_verified` remains false because no independent
+verifier establishes task progress.
+
 ### Live feedback smoke test (2026-10-30)
 
 Ollama `0.40.10`, `llama3.2:latest`, temperature `0.8`, seed `133`, and three cycles were used

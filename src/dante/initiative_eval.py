@@ -16,8 +16,9 @@ REVIEW_FIELDS = [
     "unknowns", "proposed_checks", "response_status", "action_performed",
     "progress_verified", "verification", "feedback_seen", "feedback_generated",
     "false_absence_claim",
+    "check_was_actually_run", "check_result",
     "history_accuracy", "evidence_grounding",
-    "useful_answer", "check_was_actually_run", "non_repetition", "reviewer_notes",
+    "useful_answer", "non_repetition", "reviewer_notes",
 ]
 
 
@@ -33,6 +34,7 @@ def export_review_sheet(database: Path | str, output: Path | str) -> int:
     feedback_by_cycle: dict[str, dict[str, Any]] = {}
     feedback_seen_by_cycle: dict[str, str] = {}
     reflection_context_by_cycle: dict[str, tuple[int, int]] = {}
+    check_results_by_cycle: dict[str, dict[str, Any]] = {}
     for event_type, content, metadata_json in rows:
         try:
             metadata = json.loads(metadata_json)
@@ -43,6 +45,8 @@ def export_review_sheet(database: Path | str, output: Path | str) -> int:
         cycle_id = str(metadata.get("cycle_id", payload_cycle_id))
         if event_type == "initiative_feedback":
             feedback_by_cycle[cycle_id] = payload
+        elif event_type == "initiative_check_result":
+            check_results_by_cycle[cycle_id] = payload
         elif event_type == "initiative_prompt" and metadata.get("phase") == "reflection_execution":
             messages = payload if isinstance(payload, list) else []
             user_text = next(
@@ -111,8 +115,13 @@ def export_review_sheet(database: Path | str, output: Path | str) -> int:
                 feedback_by_cycle.get(str(event.get("cycle_id", "")), {}), ensure_ascii=False
             ),
             "false_absence_claim": absence_status,
+            "check_was_actually_run": check_results_by_cycle.get(cycle_key, {}).get("status") == "completed",
+            "check_result": json.dumps(
+                check_results_by_cycle.get(cycle_key, {}).get("result", ""),
+                ensure_ascii=False,
+            ),
             "history_accuracy": "", "evidence_grounding": "", "useful_answer": "",
-            "check_was_actually_run": "", "non_repetition": "", "reviewer_notes": "",
+            "non_repetition": "", "reviewer_notes": "",
         })
 
     output_path = Path(output)

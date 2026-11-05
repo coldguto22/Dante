@@ -68,7 +68,7 @@ def test_export_review_sheet_separates_claims_from_execution_and_progress(tmp_pa
     assert json.loads(row["valid_evidence_ids"]) == ["result:cycle-0"]
     assert json.loads(row["rejected_evidence_ids"]) == ["result:fake"]
     assert row["proposed_checks"]
-    assert row["check_was_actually_run"] == ""
+    assert row["check_was_actually_run"] == "False"
     assert row["false_absence_claim"] == "pass"
     assert row["history_accuracy"] == ""
     with sqlite3.connect(database) as connection:
