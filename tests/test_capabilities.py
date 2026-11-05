@@ -1,5 +1,5 @@
 from dante.capabilities import CapabilityRegistry
-from dante.models import ActivityProposal
+from dante.models import ActivityProposal, EventLogInspectionRequest
 
 
 def test_registry_lists_available_planned_restricted_and_unavailable_capabilities():
@@ -58,4 +58,25 @@ def test_read_only_inspection_is_a_registered_internal_action():
         action_type="inspect_event_log",
     )
     decision = CapabilityRegistry().authorize_proposal(proposal, dry_run=True)
-    assert decision.allowed is True
+    assert decision.allowed is False
+    assert "validated fixed-query request" in decision.reason
+
+    valid_proposal = proposal.model_copy(update={
+        "inspection": EventLogInspectionRequest(query="event_counts")
+    })
+    valid_decision = CapabilityRegistry().authorize_proposal(valid_proposal, dry_run=True)
+    assert valid_decision.allowed is True
+
+
+def test_inspection_request_cannot_be_attached_to_a_different_action():
+    proposal = ActivityProposal(
+        summary="Reflect on the experiment",
+        rationale="It considers the evidence.",
+        action_type="reflect",
+        inspection=EventLogInspectionRequest(query="event_counts"),
+    )
+
+    decision = CapabilityRegistry().authorize_proposal(proposal, dry_run=True)
+
+    assert decision.allowed is False
+    assert "only allowed for inspect_event_log" in decision.reason

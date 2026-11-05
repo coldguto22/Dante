@@ -99,6 +99,9 @@ initiative or consciousness was established.
 ## Implementation note (2026-11-05)
 
 The fixed request schema, registry entry, read-only inspector, check/result
-events, exporter fields, and regression tests are implemented. The full suite
-passes with 70 tests. No independent verifier was added, so
-`progress_verified` remains false.
+events, exporter fields, and regression tests are implemented. A selected
+inspection proposal must contain a validated fixed-query request; the registry
+rejects it before selection otherwise. The inspector compares resolved file
+identity against configured `DANTE_MAIN_DB_PATH`, including custom filenames
+and hard links. No independent verifier was added, so `progress_verified`
+remains false.

@@ -41,7 +41,7 @@ def test_structured_passes_configured_options():
     assert client.calls[0]["options"] == {"temperature": 0.4, "seed": 7}
 
 
-def test_structured_uses_context_and_reflection_temperature_and_records_telemetry():
+def test_structured_uses_base_temperature_by_default_even_when_reflection_override_exists():
     client = FakeOllamaClient(
         '{"summary":"wait","rationale":"It ends the cycle.","action_type":"stop"}'
     )
@@ -53,9 +53,26 @@ def test_structured_uses_context_and_reflection_temperature_and_records_telemetr
     llm.structured([{"role": "user", "content": "propose"}], ActivityProposal)
 
     assert client.calls[0]["options"] == {
-        "temperature": 0.25, "seed": 7, "num_ctx": 4096
+        "temperature": 0.8, "seed": 7, "num_ctx": 4096
     }
     assert llm.last_telemetry["telemetry_status"] == "unavailable"
+
+
+def test_structured_accepts_explicit_reflection_temperature():
+    client = FakeOllamaClient(
+        '{"summary":"wait","rationale":"It ends the cycle.","action_type":"stop"}'
+    )
+    llm = OllamaLLM(Settings(temperature=0.8, seed=7, num_ctx=4096), client=client)
+
+    llm.structured(
+        [{"role": "user", "content": "reflect"}],
+        ActivityProposal,
+        temperature=0.25,
+    )
+
+    assert client.calls[0]["options"] == {
+        "temperature": 0.25, "seed": 7, "num_ctx": 4096
+    }
 
 
 def test_temperature_must_be_in_supported_range():

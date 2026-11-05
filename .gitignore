@@ -45,6 +45,7 @@ htmlcov/
 # Local generated data, logs, and memory
 data/local/
 data/runtime/
+data/manual-*-review-*.csv
 logs/
 *.log
 *.sqlite

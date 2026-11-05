@@ -43,7 +43,9 @@ class InitiativeRunner:
         self.executor = executor or InitiativeExecutor(
             self.llm, reflection_temperature=settings.reflection_temperature
         )
-        self.inspector = EventLogInspector(settings.db_path)
+        self.inspector = EventLogInspector(
+            settings.db_path, main_database=settings.main_db_path
+        )
         self.selection_policy = selection_policy or NoveltyPolicy()
         self.feedback_evaluator = InitiativeFeedbackEvaluator()
 
@@ -237,6 +239,10 @@ class InitiativeRunner:
                 "schema": proposal_schema.__name__,
                 "model": self.settings.model,
                 "temperature": self.settings.temperature,
+                "effective_temperature": self.settings.temperature,
+                "temperature_source": "DANTE_TEMPERATURE",
+                "reflection_temperature": self.settings.reflection_temperature,
+                "num_ctx": self.settings.num_ctx,
                 "seed": self.settings.seed,
                 "external_feedback": external_feedback,
                 "history_mode": history_mode,
@@ -276,7 +282,7 @@ class InitiativeRunner:
                 default=0.0,
             )
             executor_supports_action = self.executor.supports(proposal.action_type)
-            if restrict_to_executable and proposal.action_type != "stop" and not executor_supports_action:
+            if authorization.allowed and restrict_to_executable and proposal.action_type != "stop" and not executor_supports_action:
                 authorization = authorization.model_copy(update={
                     "allowed": False,
                     "reason": "No bounded executor is registered for this action type.",
@@ -382,6 +388,18 @@ class InitiativeRunner:
                                 "schema": "InitiativeReflection",
                                 "model": self.settings.model,
                                 "temperature": self.settings.temperature,
+                                "effective_temperature": (
+                                    self.settings.reflection_temperature
+                                    if self.settings.reflection_temperature is not None
+                                    else self.settings.temperature
+                                ),
+                                "temperature_source": (
+                                    "DANTE_REFLECTION_TEMPERATURE"
+                                    if self.settings.reflection_temperature is not None
+                                    else "DANTE_TEMPERATURE"
+                                ),
+                                "reflection_temperature": self.settings.reflection_temperature,
+                                "num_ctx": self.settings.num_ctx,
                                 "seed": self.settings.seed,
                                 "external_feedback": external_feedback,
                                 "history_mode": history_mode,

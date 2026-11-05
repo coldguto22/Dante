@@ -88,8 +88,10 @@ class InitiativeExecutor:
                     "the evidence says from inference and unknowns. If context is insufficient, "
                     "state what is missing and propose a concrete local check. Keep the result concise. "
                     "Program feedback, if supplied, comes from deterministic code checks; it covers "
-                    "only citation IDs, exact field duplication, and whether a check actually ran. "
-                    "It is not a score of answer usefulness or general correctness."
+                    "citation IDs, exact field duplication, whether a check actually ran, and a "
+                    "limited pattern-based absence-claim check against supplied history counts. "
+                    "That pattern check can miss paraphrases. Feedback does not score answer usefulness "
+                    "or general correctness."
                 ),
             },
             {
@@ -114,13 +116,8 @@ class InitiativeExecutor:
         ]
         if on_prompt is not None:
             on_prompt(messages)
-        previous_temperature = getattr(self.llm, "reflection_temperature", None)
-        if hasattr(self.llm, "reflection_temperature"):
-            self.llm.reflection_temperature = self.reflection_temperature
-        try:
-            result = self.llm.structured(messages, InitiativeReflection)
-        finally:
-            if hasattr(self.llm, "reflection_temperature"):
-                self.llm.reflection_temperature = previous_temperature
+        result = self.llm.structured(
+            messages, InitiativeReflection, temperature=self.reflection_temperature
+        )
         report = InitiativeReflection.model_validate(result.model_dump())
         return report

@@ -18,7 +18,6 @@ class OllamaLLM:
             self.options["seed"] = settings.seed
         if settings.num_ctx is not None:
             self.options["num_ctx"] = settings.num_ctx
-        self.reflection_temperature = settings.reflection_temperature
         self.last_telemetry: dict[str, int | str | None] = {}
 
     def chat(self, messages: list[dict[str, str]]) -> str:
@@ -38,11 +37,17 @@ class OllamaLLM:
                 "and that the configured model is installed."
             ) from exc
 
-    def structured(self, messages: list[dict[str, str]], schema: type[BaseModel]) -> BaseModel:
+    def structured(
+        self,
+        messages: list[dict[str, str]],
+        schema: type[BaseModel],
+        *,
+        temperature: float | None = None,
+    ) -> BaseModel:
         try:
             options = dict(self.options)
-            if self.reflection_temperature is not None:
-                options["temperature"] = self.reflection_temperature
+            if temperature is not None:
+                options["temperature"] = temperature
             response = self.client.chat(
                 model=self.model,
                 messages=messages,

@@ -73,7 +73,7 @@ Use a separate database path for experiments so initiative events do not mix wit
 
 The initiative cycle uses the configured Ollama model and the `DANTE_DB_PATH` SQLite database. It records prompts/configuration as `initiative_prompt` events, candidates as `proposal` events, and the selection as an `initiative_decision` event. Execute mode records `initiative_result` events for local reflections and can run bounded, read-only event-log inspections, including errors, without exposing SQL or external actions. It supplies recorded outcomes to subsequent proposals and reflections. To inspect recent records, use `python -m dante.memory_audit`.
 
-Configuration is environment-based. Existing settings include `OLLAMA_HOST`, `DANTE_MODEL`, `DANTE_DB_PATH`, `DANTE_TEMPERATURE`, optional `DANTE_SEED`, `DANTE_NUM_CTX`, and `DANTE_REFLECTION_TEMPERATURE`. Ollama must be running and the configured model must be installed.
+Configuration is environment-based. Settings include `OLLAMA_HOST`, `DANTE_MODEL`, `DANTE_DB_PATH`, `DANTE_MAIN_DB_PATH`, `DANTE_TEMPERATURE`, optional `DANTE_SEED`, `DANTE_NUM_CTX`, and `DANTE_REFLECTION_TEMPERATURE`. Set `DANTE_MAIN_DB_PATH` to the actual conversation database path when it differs from `data/dante.sqlite3`; the initiative inspector rejects that path even when it has a custom filename. Ollama must be running and the configured model must be installed.
 
 ## Safety and evaluation scope
 

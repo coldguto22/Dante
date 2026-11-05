@@ -56,9 +56,18 @@ def test_inspector_runs_bounded_read_only_queries_without_result_text(tmp_path):
 
 def test_inspector_rejects_main_database_and_missing_database(tmp_path):
     with pytest.raises(ValueError, match="main conversation"):
-        EventLogInspector(tmp_path / "dante.sqlite3").inspect(
+        EventLogInspector(
+            tmp_path / "conversation-renamed.sqlite3",
+            main_database=tmp_path / "conversation-renamed.sqlite3",
+        ).inspect(
             EventLogInspectionRequest(query="event_counts")
         )
+    main_database = tmp_path / "main-with-custom-name.sqlite3"
+    _database(main_database)
+    with pytest.raises(ValueError, match="main conversation"):
+        EventLogInspector(
+            tmp_path / "." / main_database.name, main_database=main_database
+        ).inspect(EventLogInspectionRequest(query="event_counts"))
     with pytest.raises(FileNotFoundError):
         EventLogInspector(tmp_path / "experiment.sqlite3").inspect(
             EventLogInspectionRequest(query="event_counts")

@@ -128,6 +128,18 @@ class CapabilityRegistry:
                 capability_name=capability.name,
                 reason=f"Capability status is {capability.status}, not available.",
             )
+        if proposal.action_type == "inspect_event_log" and proposal.inspection is None:
+            return AuthorizationDecision(
+                allowed=False,
+                capability_name=capability.name,
+                reason="Event-log inspection requires a validated fixed-query request.",
+            )
+        if proposal.action_type != "inspect_event_log" and proposal.inspection is not None:
+            return AuthorizationDecision(
+                allowed=False,
+                capability_name=capability.name,
+                reason="Inspection parameters are only allowed for inspect_event_log.",
+            )
         if proposal.requires_external_action or capability.external_effects:
             return AuthorizationDecision(
                 allowed=False,

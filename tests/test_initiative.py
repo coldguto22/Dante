@@ -159,7 +159,7 @@ def test_execute_mode_runs_only_reflection_and_records_result(tmp_path):
     assert {event.metadata["phase"] for event in prompts} == {
         "proposal_generation", "reflection_execution"
     }
-    assert all(event.metadata["model"] == "llama3.2" for event in prompts)
+    assert all(event.metadata["model"] == "llama3.1:8b" for event in prompts)
 
 
 def test_execute_mode_runs_read_only_event_log_check_and_keeps_progress_unverified(tmp_path):
@@ -186,6 +186,78 @@ def test_execute_mode_runs_read_only_event_log_check_and_keeps_progress_unverifi
     assert any(event.event_type == "initiative_check" for event in events)
     check_result = next(event for event in events if event.event_type == "initiative_check_result")
     assert json.loads(check_result.content)["status"] == "completed"
+
+
+def test_execute_mode_rejects_inspection_without_validated_request_and_uses_valid_candidate(tmp_path):
+    malformed = ActivityProposal(
+        summary="Inspect the experiment log",
+        rationale="It may clarify the current state.",
+        action_type="inspect_event_log",
+    )
+    reflection = ActivityProposal(
+        summary="Reflect on the recorded experiment",
+        rationale="It reviews the bounded evidence.",
+        action_type="reflect",
+    )
+    database = tmp_path / "initiative-experiment.sqlite3"
+    store = EventStore(database)
+    runner = InitiativeRunner(
+        Settings(db_path=database),
+        llm=FakeStructuredLLM(ActivityProposalBatch(proposals=[malformed, reflection])),
+        store=store,
+        executor=FakeExecutor(),
+    )
+
+    result = runner.cycle(execute=True)
+
+    assert result["selected"].action_type == "reflect"
+    assert result["execution"]["status"] == "completed"
+    assert not any(
+        event.event_type in {"initiative_check", "initiative_check_result"}
+        for event in store.recent(limit=30)
+    )
+    malformed_event = next(
+        event for event in store.recent(limit=30)
+        if event.event_type == "proposal" and event.metadata["action_type"] == "inspect_event_log"
+    )
+    assert malformed_event.metadata["authorized"] is False
+    assert "validated fixed-query request" in malformed_event.metadata["reason"]
+
+
+def test_prompt_metadata_records_effective_phase_options(tmp_path):
+    proposal = ActivityProposal(
+        summary="Reflect on the recorded experiment",
+        rationale="It reviews bounded evidence.",
+        action_type="reflect",
+    )
+    store = EventStore(tmp_path / "initiative.sqlite3")
+    runner = InitiativeRunner(
+        Settings(
+            db_path=tmp_path / "initiative.sqlite3",
+            temperature=0.8,
+            reflection_temperature=0.25,
+            num_ctx=4096,
+            seed=201,
+        ),
+        llm=FakeStructuredLLM(ActivityProposalBatch(proposals=[proposal])),
+        store=store,
+        executor=FakeExecutor(),
+    )
+
+    runner.cycle(execute=True)
+
+    prompts = {
+        event.metadata["phase"]: event.metadata
+        for event in store.recent(limit=20)
+        if event.event_type == "initiative_prompt"
+    }
+    assert prompts["proposal_generation"]["effective_temperature"] == 0.8
+    assert prompts["proposal_generation"]["temperature_source"] == "DANTE_TEMPERATURE"
+    assert prompts["proposal_generation"]["num_ctx"] == 4096
+    assert prompts["reflection_execution"]["effective_temperature"] == 0.25
+    assert prompts["reflection_execution"]["temperature_source"] == "DANTE_REFLECTION_TEMPERATURE"
+    assert prompts["reflection_execution"]["reflection_temperature"] == 0.25
+    assert prompts["reflection_execution"]["num_ctx"] == 4096
 
 
 def test_reflection_only_dry_run_uses_execution_schema_without_executing(tmp_path):

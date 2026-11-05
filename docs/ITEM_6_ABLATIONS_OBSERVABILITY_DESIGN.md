@@ -85,9 +85,11 @@ evaluation, not as evidence for or against consciousness.
 
 ## Implementation note (2026-11-05)
 
-`DANTE_NUM_CTX` and `DANTE_REFLECTION_TEMPERATURE` are implemented. Ollama
-structured-call telemetry records `prompt_eval_count`, `eval_count`, and an
-explicit availability status in initiative prompt metadata. The model-size and
-field-order arms remain protocol-only because they require controlled local
-model availability and separate experimental runs; no live comparative numbers
-were fabricated.
+`DANTE_NUM_CTX` and `DANTE_REFLECTION_TEMPERATURE` are implemented. Proposal
+calls use `DANTE_TEMPERATURE`; the reflection override is passed only to
+reflection calls. Initiative prompt metadata records effective temperature,
+its source, configured reflection temperature, context window, seed, model, and
+Ollama structured-call telemetry (`prompt_eval_count`, `eval_count`, and an
+explicit availability status). The model-size and field-order arms remain
+protocol-only because they require controlled local model availability and
+separate experimental runs; no live comparative numbers were fabricated.

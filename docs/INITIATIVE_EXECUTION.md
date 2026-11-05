@@ -120,8 +120,12 @@ When Ollama exposes them, initiative prompt metadata also records
 `prompt_eval_count` and `eval_count`. `DANTE_NUM_CTX` is optional and is passed
 as the Ollama `num_ctx` option. `DANTE_REFLECTION_TEMPERATURE` is optional and
 changes only reflection structured calls; proposal generation keeps
-`DANTE_TEMPERATURE`. Missing client telemetry is recorded explicitly as
-unavailable rather than inferred.
+`DANTE_TEMPERATURE`. Each prompt event records effective temperature, its
+source, reflection override, context window, model, and seed. Missing client
+telemetry is recorded explicitly as unavailable rather than inferred. Set
+`DANTE_MAIN_DB_PATH` to the actual conversation database path when it differs
+from `data/dante.sqlite3`; initiative inspection rejects that resolved file
+even when it has a custom filename.
 
 - exact and lexical near-duplicate proposals;
 - actions completed and execution errors;
@@ -365,3 +369,45 @@ field duplication; it is not evidence that the new prompt reliably enforces sema
 The database audit found 21 events in execute and no user/assistant conversation messages. These
 single-pair results are diagnostic and have one manual reviewer; they do not establish a stable
 rate or causal effect. The CSV review sheet for this run was exported from the database read-only.
+
+### Llama 3.1 raw/distilled smoke comparison (2026-11-05)
+
+After adding fixed-query validation, explicit main-database path protection, and
+per-phase option metadata, one live diagnostic pair used Ollama `0.40.10`,
+`llama3.1:8b`, seed `201`, proposal temperature `0.8`, reflection temperature
+`0.25`, `num_ctx=4096`, and a maximum of three cycles. Each arm used a fresh,
+separate SQLite database. The project model default is now `llama3.1:8b`. The
+main conversation database was not used.
+
+| Arm | Decisions | Proposals | Reflection results | Selected stop | Invalid inspection proposals rejected |
+|---|---:|---:|---:|---:|---:|
+| `raw` | 3 | 8 | 2 | 1 | 3 |
+| `distilled` | 2 | 6 | 1 | 1 | 2 |
+
+The raw arm completed two reflection calls and then selected stop. Its first
+response correctly described the initially empty history. In the second
+response it cited the previous result with a valid `result:<cycle_id>` ID, but
+also claimed that historical data was lacking even though that result was in
+the prompt. The worksheet's `false_absence_claim` heuristic marked this as
+`pass`, exposing a wording gap in the heuristic. The distilled arm completed
+one reflection and then stopped; its first response treated `cycle_index`,
+`prior_results`, and `prior_selected_summaries` as evidence IDs, all of which
+the program rejected. Neither arm recorded verified progress.
+
+In both arms, the model proposed `inspect_event_log` without a fixed-query
+request. The registry rejected those candidates before selection; no failed
+inspection execution was recorded. This confirms the malformed-request guard
+on live model output. The fixed read-only inspector also returned event counts
+when called against an experiment database, and the database bytes remained
+unchanged.
+
+The prompt events recorded the intended per-phase settings: proposal calls at
+`0.8`, reflections at `0.25`, `num_ctx=4096`, seed `201`, model
+`llama3.1:8b`, and available Ollama token-count telemetry. The proposal
+prompts differ between raw and distilled by design, and only one pair was run;
+these observations cannot establish which history mode is better. The CSV
+worksheets have blank manual scores for independent review:
+`data/manual-llama31-raw-review-20261105.csv` and
+`data/manual-llama31-distilled-review-20261105.csv`. The two local SQLite
+experiment databases are `data/manual-llama31-raw-20261105.sqlite3` and
+`data/manual-llama31-distilled-20261105.sqlite3`; they are ignored by Git.

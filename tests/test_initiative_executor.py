@@ -8,10 +8,12 @@ class RecordingLLM:
     def __init__(self, result="reflection result"):
         self.result = result
         self.messages = None
+        self.temperature = None
 
-    def structured(self, messages, schema):
+    def structured(self, messages, schema, *, temperature=None):
         self.messages = messages
         self.schema = schema
+        self.temperature = temperature
         return InitiativeReflection(response=self.result)
 
 
@@ -41,7 +43,9 @@ def test_reflection_executor_uses_bounded_context_and_records_prompt():
     assert "Earlier selected question." in llm.messages[1]["content"]
     assert "no access" in llm.messages[0]["content"]
     assert "Put only the direct answer in response" in llm.messages[0]["content"]
+    assert "pattern-based absence-claim check" in llm.messages[0]["content"]
     assert "Prior program-generated feedback" not in llm.messages[1]["content"]
+    assert llm.temperature is None
     schema = InitiativeReflection.model_json_schema()
     assert "Direct answer only" in schema["properties"]["response"]["description"]
 
@@ -64,6 +68,19 @@ def test_executor_receives_deterministic_feedback_as_structured_context():
     assert "Use exact evidence IDs." in llm.messages[1]["content"]
 
 
+def test_reflection_executor_passes_explicit_reflection_temperature():
+    llm = RecordingLLM()
+    executor = InitiativeExecutor(llm, reflection_temperature=0.25)
+
+    executor.execute(
+        ActivityProposal(summary="Reflect", rationale="It checks the result.", action_type="reflect"),
+        recent_results=[],
+        recent_selected_summaries=[],
+    )
+
+    assert llm.temperature == 0.25
+
+
 def test_reflection_executor_rejects_unimplemented_action_types():
     executor = InitiativeExecutor(RecordingLLM())
     proposal = ActivityProposal(summary="Search the web", rationale="It tests the question.", action_type="research_question")
@@ -78,8 +95,9 @@ def test_reflection_executor_rejects_unimplemented_action_types():
 
 def test_reflection_executor_preserves_evidence_claims_for_audit():
     class ReferencingLLM(RecordingLLM):
-        def structured(self, messages, schema):
+        def structured(self, messages, schema, *, temperature=None):
             self.messages = messages
+            self.temperature = temperature
             return InitiativeReflection(response="Answer", used_evidence_ids=["result:real", "result:invented"])
 
     executor = InitiativeExecutor(ReferencingLLM())

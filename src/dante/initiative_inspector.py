@@ -10,11 +10,25 @@ from dante.models import EventLogInspectionRequest
 class EventLogInspector:
     """Execute only bounded, parameterized event-log queries."""
 
-    def __init__(self, database: Path | str) -> None:
+    def __init__(
+        self,
+        database: Path | str,
+        *,
+        main_database: Path | str = Path("data/dante.sqlite3"),
+    ) -> None:
         self.database = Path(database).resolve()
+        self.main_database = Path(main_database).resolve()
+
+    def _is_main_database(self) -> bool:
+        if self.database == self.main_database:
+            return True
+        try:
+            return self.database.samefile(self.main_database)
+        except (FileNotFoundError, OSError):
+            return False
 
     def inspect(self, request: EventLogInspectionRequest) -> dict[str, Any]:
-        if self.database.name == "dante.sqlite3":
+        if self._is_main_database():
             raise ValueError("The main conversation database is not an initiative experiment database.")
         if not self.database.is_file():
             raise FileNotFoundError(f"Experiment database does not exist: {self.database}")
