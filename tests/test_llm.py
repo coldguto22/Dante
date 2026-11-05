@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from dante.config import Settings
-from dante.llm import OllamaLLM
+from dante.llm import LLMError, OllamaLLM
 from dante.models import ActivityProposal
 
 
@@ -23,7 +23,9 @@ def test_chat_passes_configured_temperature_and_seed():
     llm = OllamaLLM(Settings(temperature=0.25, seed=123), client=client)
 
     assert llm.chat([{"role": "user", "content": "hello"}]) == "hello"
-    assert client.calls[0]["options"] == {"temperature": 0.25, "seed": 123}
+    assert client.calls[0]["options"] == {
+        "temperature": 0.25, "seed": 123, "num_ctx": 2048
+    }
 
 
 def test_structured_passes_configured_options():
@@ -38,7 +40,9 @@ def test_structured_passes_configured_options():
     )
 
     assert result.summary == "wait"
-    assert client.calls[0]["options"] == {"temperature": 0.4, "seed": 7}
+    assert client.calls[0]["options"] == {
+        "temperature": 0.4, "seed": 7, "num_ctx": 2048
+    }
 
 
 def test_structured_uses_base_temperature_by_default_even_when_reflection_override_exists():
@@ -86,4 +90,15 @@ def test_seed_is_omitted_when_not_configured():
 
     llm.chat([{"role": "user", "content": "hello"}])
 
-    assert client.calls[0]["options"] == {"temperature": 0.8}
+    assert client.calls[0]["options"] == {"temperature": 0.8, "num_ctx": 2048}
+
+
+def test_chat_error_preserves_ollama_failure_cause():
+    class FailingClient:
+        def chat(self, **kwargs):
+            raise RuntimeError("llama-server reported out-of-memory during startup")
+
+    llm = OllamaLLM(Settings(model="llama3.1:8b"), client=FailingClient())
+
+    with pytest.raises(LLMError, match="llama3.1:8b.*out-of-memory"):
+        llm.chat([{"role": "user", "content": "hello"}])

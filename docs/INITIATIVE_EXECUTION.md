@@ -117,8 +117,9 @@ Inspect each database with `python -m dante.memory_audit`. In the execution run,
 The event log stores each proposal and reflection prompt, model name, temperature, seed, proposals, decisions, results, and errors. Record the Ollama version with the run notes. Compare:
 
 When Ollama exposes them, initiative prompt metadata also records
-`prompt_eval_count` and `eval_count`. `DANTE_NUM_CTX` is optional and is passed
-as the Ollama `num_ctx` option. `DANTE_REFLECTION_TEMPERATURE` is optional and
+`prompt_eval_count` and `eval_count`. `DANTE_NUM_CTX` defaults to `2048` and is
+passed as the Ollama `num_ctx` option; it can be raised for a controlled
+context-window arm when GPU memory allows. `DANTE_REFLECTION_TEMPERATURE` is optional and
 changes only reflection structured calls; proposal generation keeps
 `DANTE_TEMPERATURE`. Each prompt event records effective temperature, its
 source, reflection override, context window, model, and seed. Missing client

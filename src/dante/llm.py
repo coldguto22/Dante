@@ -32,9 +32,10 @@ class OllamaLLM:
         except LLMError:
             raise
         except Exception as exc:
+            detail = str(exc).splitlines()[0][:500]
             raise LLMError(
-                "Could not get a response from Ollama. Check that Ollama is running "
-                "and that the configured model is installed."
+                f"Could not get a response from Ollama using model {self.model} "
+                f"({type(exc).__name__}): {detail}"
             ) from exc
 
     def structured(

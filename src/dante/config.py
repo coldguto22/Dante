@@ -14,7 +14,7 @@ class Settings(BaseModel):
     main_db_path: Path = Path("data/dante.sqlite3")
     temperature: float = Field(default=0.8, ge=0.0, le=2.0)
     reflection_temperature: float | None = Field(default=None, ge=0.0, le=2.0)
-    num_ctx: int | None = Field(default=None, ge=1, le=131072)
+    num_ctx: int | None = Field(default=2048, ge=1, le=131072)
     seed: int | None = None
     system_prompt: str = (
         "You are Dante, an experimental local agent. Be honest about uncertainty "
@@ -54,7 +54,7 @@ def get_settings() -> Settings:
         ),
         num_ctx=(
             int(os.environ["DANTE_NUM_CTX"])
-            if os.getenv("DANTE_NUM_CTX") not in (None, "") else None
+            if os.getenv("DANTE_NUM_CTX") not in (None, "") else 2048
         ),
         seed=int(raw_seed) if raw_seed not in (None, "") else None,
         system_prompt=os.getenv(

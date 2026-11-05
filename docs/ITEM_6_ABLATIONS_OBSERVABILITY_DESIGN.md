@@ -15,8 +15,8 @@ a time and must not turn model output into a quality claim.
 
 ### 1. Observability only
 
-Add optional `DANTE_NUM_CTX` configuration and pass it to Ollama only when set.
-Verify the installed `ollama` client's response attributes before using them.
+Add configurable `DANTE_NUM_CTX` with a 2048-token default and pass it to
+Ollama as `num_ctx`. Verify the installed `ollama` client's response attributes before using them.
 Record `prompt_eval_count` and `eval_count` in the relevant prompt event metadata,
 without storing message text beyond the existing event behavior. If the client
 does not expose an attribute, record an explicit unavailable value rather than
@@ -93,3 +93,11 @@ Ollama structured-call telemetry (`prompt_eval_count`, `eval_count`, and an
 explicit availability status). The model-size and field-order arms remain
 protocol-only because they require controlled local model availability and
 separate experimental runs; no live comparative numbers were fabricated.
+
+The conversation module uses this same model and context configuration. A live
+conversation attempt with no context override failed because Ollama could not
+allocate roughly 6 GiB for the KV cache on the 12 GB GPU. Setting the default
+`DANTE_NUM_CTX=2048` allowed `llama3.1:8b` to answer from an isolated test
+database. `OllamaLLM.chat()` now includes the first line of the server error in
+its user-visible diagnostic so connection failures and model-load failures can
+be distinguished. This confirms startup and one response, not answer quality.
