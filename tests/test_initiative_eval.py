@@ -68,7 +68,8 @@ def test_export_review_sheet_separates_claims_from_execution_and_progress(tmp_pa
     assert json.loads(row["valid_evidence_ids"]) == ["result:cycle-0"]
     assert json.loads(row["rejected_evidence_ids"]) == ["result:fake"]
     assert row["proposed_checks"]
-    assert row["check_was_actually_run"] == ""
+    assert row["check_was_actually_run"] == "False"
+    assert row["false_absence_claim"] == "pass"
     assert row["history_accuracy"] == ""
     with sqlite3.connect(database) as connection:
         assert connection.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 4
@@ -88,3 +89,40 @@ def test_export_review_sheet_supports_legacy_text_result(tmp_path):
         row = next(csv.DictReader(file))
     assert row["response"] == "Old result"
     assert row["progress_verified"] == "False"
+
+
+def test_export_review_sheet_evaluates_supplied_context_from_reflection_prompt(tmp_path):
+    database = tmp_path / "context.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE events (id INTEGER PRIMARY KEY, event_type TEXT, content TEXT, metadata_json TEXT DEFAULT '{}')"
+        )
+        result = {
+            "cycle_id": "cycle-2",
+            "status": "completed",
+            "result": {"response": "The prior outcomes are empty."},
+            "evidence_validation": {"valid_ids": ["result:cycle-1"], "rejected_ids": []},
+        }
+        connection.execute(
+            "INSERT INTO events(event_type, content, metadata_json) VALUES (?, ?, ?)",
+            ("initiative_result", json.dumps(result), json.dumps({"cycle_id": "cycle-2"})),
+        )
+        prompt = (
+            "Recent selected proposal summaries:\n"
+            "- Earlier selected proposal: Prior question\n"
+            "Prior outcomes:\n"
+            "- Evidence ID: result:cycle-1\n"
+        )
+        connection.execute(
+            "INSERT INTO events(event_type, content, metadata_json) VALUES (?, ?, ?)",
+            (
+                "initiative_prompt",
+                json.dumps([{"role": "user", "content": prompt}]),
+                json.dumps({"cycle_id": "cycle-2", "phase": "reflection_execution"}),
+            ),
+        )
+    output = tmp_path / "context.csv"
+    assert export_review_sheet(database, output) == 1
+    with output.open(encoding="utf-8-sig", newline="") as file:
+        row = next(csv.DictReader(file))
+    assert row["false_absence_claim"] == "fail"

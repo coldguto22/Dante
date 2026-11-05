@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 def utc_now() -> datetime:
@@ -14,11 +14,32 @@ class Message(BaseModel):
     content: str = Field(min_length=1, max_length=20000)
 
 
+class EventLogInspectionRequest(BaseModel):
+    """One bounded, code-owned query over an experiment event log."""
+
+    query: Literal[
+        "event_counts", "recent_results", "cycle_result", "recent_decisions"
+    ]
+    limit: int = Field(default=5, ge=1, le=10)
+    cycle_id: str | None = Field(default=None, min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_query_parameters(self) -> "EventLogInspectionRequest":
+        if self.query == "cycle_result" and self.cycle_id is None:
+            raise ValueError("cycle_result requires cycle_id")
+        if self.query != "cycle_result" and self.cycle_id is not None:
+            raise ValueError("cycle_id is only valid for cycle_result")
+        return self
+
+
 class ActivityProposal(BaseModel):
     summary: str = Field(min_length=1, max_length=500)
-    rationale: str = Field(default="", max_length=1500)
-    action_type: Literal["respond", "reflect", "research_question", "stop"] = "respond"
+    rationale: str = Field(min_length=1, max_length=1500)
+    action_type: Literal[
+        "respond", "reflect", "research_question", "inspect_event_log", "stop"
+    ] = "respond"
     requires_external_action: bool = False
+    inspection: EventLogInspectionRequest | None = None
 
 
 class ActivityProposalBatch(BaseModel):
@@ -29,9 +50,10 @@ class ExecutableActivityProposal(BaseModel):
     """Proposal schema limited to the action types supported by execute mode."""
 
     summary: str = Field(min_length=1, max_length=500)
-    rationale: str = Field(default="", max_length=1500)
-    action_type: Literal["reflect", "stop"]
+    rationale: str = Field(min_length=1, max_length=1500)
+    action_type: Literal["reflect", "inspect_event_log", "stop"]
     requires_external_action: bool = False
+    inspection: EventLogInspectionRequest | None = None
 
 
 class ExecutableActivityProposalBatch(BaseModel):
@@ -84,7 +106,8 @@ class AgentEvent(BaseModel):
     timestamp: datetime = Field(default_factory=utc_now)
     event_type: Literal[
         "user_message", "assistant_message", "proposal", "initiative_decision",
-        "initiative_prompt", "initiative_result", "initiative_feedback", "error"
+        "initiative_prompt", "initiative_result", "initiative_feedback", "error",
+        "initiative_check", "initiative_check_result"
     ]
     content: str = Field(min_length=1, max_length=20000)
     metadata: dict[str, str | int | float | bool | None] = Field(default_factory=dict)

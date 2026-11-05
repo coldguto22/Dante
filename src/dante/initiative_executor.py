@@ -1,6 +1,7 @@
 """Explicit executor for the bounded local initiative action set."""
 import json
 from collections.abc import Callable
+from typing import Literal
 
 from dante.llm import OllamaLLM
 from dante.models import ActivityProposal, InitiativeReflection
@@ -9,10 +10,11 @@ from dante.models import ActivityProposal, InitiativeReflection
 class InitiativeExecutor:
     """Execute only local reflection; all other initiative actions remain proposals."""
 
-    EXECUTABLE_ACTIONS = frozenset({"reflect"})
+    EXECUTABLE_ACTIONS = frozenset({"reflect", "inspect_event_log"})
 
-    def __init__(self, llm: OllamaLLM) -> None:
+    def __init__(self, llm: OllamaLLM, reflection_temperature: float | None = None) -> None:
         self.llm = llm
+        self.reflection_temperature = reflection_temperature
 
     def supports(self, action_type: str) -> bool:
         return action_type in self.EXECUTABLE_ACTIONS
@@ -24,18 +26,32 @@ class InitiativeExecutor:
         recent_results: list[dict[str, object]],
         recent_selected_summaries: list[str],
         recent_feedback: list[dict[str, object]] | None = None,
+        history_mode: Literal["raw", "distilled"] = "raw",
+        state_facts: dict[str, int] | None = None,
         on_prompt: Callable[[list[dict[str, str]]], None] | None = None,
     ) -> InitiativeReflection:
         """Run one bounded reflection with recent outcomes as explicitly labeled context."""
         if not self.supports(proposal.action_type):
             raise ValueError(f"No executor is registered for {proposal.action_type!r}.")
+        if proposal.action_type == "inspect_event_log":
+            raise ValueError("Event-log inspection is executed by the code-owned inspector.")
+        if history_mode not in {"raw", "distilled"}:
+            raise ValueError(f"Unknown initiative history mode: {history_mode!r}.")
         history_items = recent_results[-3:]
         history = "\n".join(
             f"- Evidence ID: {item.get('evidence_id', 'unknown')}\n"
             f"  Cycle: {item.get('cycle_id', 'unknown')}\n"
             f"  Action/status: {item.get('action_type', 'unknown')}/"
             f"{item.get('status', 'unknown')}\n"
-            f"  Prior model output (unverified): {item.get('result', '')}"
+            + (
+                f"  Prior model output (unverified): {item.get('result', '')}"
+                if history_mode == "raw"
+                else (
+                    f"  Selected summary: {item.get('summary', '')}\n"
+                    f"  Evidence validation: {item.get('evidence_validation', {})}\n"
+                    f"  Progress verified: {item.get('progress_verified', False)}"
+                )
+            )
             for item in history_items
         ) or "- No earlier execution results are available."
         selected_history = "\n".join(
@@ -72,8 +88,10 @@ class InitiativeExecutor:
                     "the evidence says from inference and unknowns. If context is insufficient, "
                     "state what is missing and propose a concrete local check. Keep the result concise. "
                     "Program feedback, if supplied, comes from deterministic code checks; it covers "
-                    "only citation IDs, exact field duplication, and whether a check actually ran. "
-                    "It is not a score of answer usefulness or general correctness."
+                    "citation IDs, exact field duplication, whether a check actually ran, and a "
+                    "limited pattern-based absence-claim check against supplied history counts. "
+                    "That pattern check can miss paraphrases. Feedback does not score answer usefulness "
+                    "or general correctness."
                 ),
             },
             {
@@ -81,6 +99,11 @@ class InitiativeExecutor:
                 "content": (
                     f"Reflection question: {proposal.summary}\n"
                     f"Proposal rationale: {proposal.rationale or '(none supplied)'}\n"
+                    + (
+                        f"Authoritative program facts: {json.dumps(state_facts, ensure_ascii=False)}\n"
+                        if history_mode == "distilled" and state_facts is not None else ""
+                    )
+                    +
                     f"Recent selected proposal summaries:\n{selected_history}\n"
                     f"Prior outcomes (historical model output, not verified facts):\n{history}"
                     + (
@@ -93,6 +116,8 @@ class InitiativeExecutor:
         ]
         if on_prompt is not None:
             on_prompt(messages)
-        result = self.llm.structured(messages, InitiativeReflection)
+        result = self.llm.structured(
+            messages, InitiativeReflection, temperature=self.reflection_temperature
+        )
         report = InitiativeReflection.model_validate(result.model_dump())
         return report

@@ -31,6 +31,57 @@ def test_deterministic_feedback_flags_invalid_ids_and_duplicated_checks():
     assert checks["check_execution_and_progress"].status == "unverified"
     assert any("exact evidence IDs" in guidance for guidance in feedback.guidance)
     assert any("not an executed check" in guidance for guidance in feedback.guidance)
+    assert {check.check_id for check in feedback.checks} == {
+        "citation_integrity", "exact_check_duplication",
+        "check_execution_and_progress", "false_absence_claim",
+    }
+
+
+def test_false_absence_claim_check_distinguishes_supplied_history():
+    evaluator = InitiativeFeedbackEvaluator()
+    empty = evaluator.evaluate(
+        "empty",
+        InitiativeReflection(response="No earlier execution results are available."),
+        available_evidence_ids=set(),
+        prior_results=0,
+        prior_selected_summaries=0,
+    )
+    assert next(check for check in empty.checks if check.check_id == "false_absence_claim").status == "pass"
+
+    false_result = evaluator.evaluate(
+        "results",
+        InitiativeReflection(response="The prior outcomes are empty."),
+        available_evidence_ids={"result:old"},
+        prior_results=1,
+        prior_selected_summaries=0,
+    )
+    assert next(check for check in false_result.checks if check.check_id == "false_absence_claim").status == "fail"
+    assert any("non-empty" in item for item in false_result.guidance)
+
+    false_summary = evaluator.evaluate(
+        "summaries",
+        InitiativeReflection(response="The selected summaries are empty."),
+        available_evidence_ids=set(),
+        prior_results=0,
+        prior_selected_summaries=1,
+    )
+    assert next(check for check in false_summary.checks if check.check_id == "false_absence_claim").status == "fail"
+
+    no_claim = evaluator.evaluate(
+        "none",
+        InitiativeReflection(response="The evidence does not answer the question."),
+        available_evidence_ids={"result:old"},
+        prior_results=1,
+        prior_selected_summaries=1,
+    )
+    assert next(check for check in no_claim.checks if check.check_id == "false_absence_claim").status == "pass"
+
+    omitted = evaluator.evaluate(
+        "omitted",
+        InitiativeReflection(response="No earlier execution results are available."),
+        available_evidence_ids=set(),
+    )
+    assert next(check for check in omitted.checks if check.check_id == "false_absence_claim").status == "not_applicable"
 
 
 class FakeStructuredLLM:
@@ -67,8 +118,8 @@ class FeedbackExecutor:
 
 
 def test_opt_in_feedback_is_logged_and_injected_into_next_cycle(tmp_path):
-    proposal1 = ActivityProposal(summary="Review the first cycle", action_type="reflect")
-    proposal2 = ActivityProposal(summary="Correct the citation in the prior reflection", action_type="reflect")
+    proposal1 = ActivityProposal(summary="Review the first cycle", rationale="It checks continuity.", action_type="reflect")
+    proposal2 = ActivityProposal(summary="Correct the citation in the prior reflection", rationale="It addresses the prior error.", action_type="reflect")
     llm = FakeStructuredLLM([
         ActivityProposalBatch(proposals=[proposal1]),
         ActivityProposalBatch(proposals=[proposal2]),

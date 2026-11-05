@@ -9,9 +9,12 @@ from pydantic import BaseModel, Field, field_validator
 
 class Settings(BaseModel):
     ollama_host: str = "http://localhost:11434"
-    model: str = "llama3.2"
+    model: str = "llama3.1:8b"
     db_path: Path = Path("data/dante.sqlite3")
+    main_db_path: Path = Path("data/dante.sqlite3")
     temperature: float = Field(default=0.8, ge=0.0, le=2.0)
+    reflection_temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    num_ctx: int | None = Field(default=2048, ge=1, le=131072)
     seed: int | None = None
     system_prompt: str = (
         "You are Dante, an experimental local agent. Be honest about uncertainty "
@@ -41,9 +44,18 @@ def get_settings() -> Settings:
     raw_seed = os.getenv("DANTE_SEED")
     return Settings(
         ollama_host=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
-        model=os.getenv("DANTE_MODEL", "llama3.2"),
+        model=os.getenv("DANTE_MODEL", "llama3.1:8b"),
         db_path=Path(os.getenv("DANTE_DB_PATH", "data/dante.sqlite3")),
+        main_db_path=Path(os.getenv("DANTE_MAIN_DB_PATH", "data/dante.sqlite3")),
         temperature=float(os.getenv("DANTE_TEMPERATURE", "0.8")),
+        reflection_temperature=(
+            float(os.environ["DANTE_REFLECTION_TEMPERATURE"])
+            if os.getenv("DANTE_REFLECTION_TEMPERATURE") not in (None, "") else None
+        ),
+        num_ctx=(
+            int(os.environ["DANTE_NUM_CTX"])
+            if os.getenv("DANTE_NUM_CTX") not in (None, "") else 2048
+        ),
         seed=int(raw_seed) if raw_seed not in (None, "") else None,
         system_prompt=os.getenv(
             "DANTE_SYSTEM_PROMPT",

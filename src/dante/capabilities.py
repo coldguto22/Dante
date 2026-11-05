@@ -54,6 +54,13 @@ class CapabilityRegistry:
                 notes="Formulating a question is not the same as searching the web or verifying facts.",
             ),
             Capability(
+                name="inspect_event_log",
+                description="Run one fixed, read-only query over the bounded initiative experiment log.",
+                status="available",
+                supported_action_types=("inspect_event_log",),
+                external_effects=False,
+            ),
+            Capability(
                 name="stop_cycle",
                 description="End the current initiative loop without performing an action.",
                 status="available",
@@ -120,6 +127,18 @@ class CapabilityRegistry:
                 allowed=False,
                 capability_name=capability.name,
                 reason=f"Capability status is {capability.status}, not available.",
+            )
+        if proposal.action_type == "inspect_event_log" and proposal.inspection is None:
+            return AuthorizationDecision(
+                allowed=False,
+                capability_name=capability.name,
+                reason="Event-log inspection requires a validated fixed-query request.",
+            )
+        if proposal.action_type != "inspect_event_log" and proposal.inspection is not None:
+            return AuthorizationDecision(
+                allowed=False,
+                capability_name=capability.name,
+                reason="Inspection parameters are only allowed for inspect_event_log.",
             )
         if proposal.requires_external_action or capability.external_effects:
             return AuthorizationDecision(
